@@ -2,6 +2,7 @@
 *.csv
 *.csv.gz
 
+competencia-02/config.yml
 
 # Windows image file caches
 Thumbs.db

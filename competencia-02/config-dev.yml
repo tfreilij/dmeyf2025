@@ -1,9 +1,9 @@
-STUDY_NAME : "Compe_02_(V0.0)"
+STUDY_NAME : "competencia-02-study-1-0"
 
-BUCKET_NAME: "/users/joaquintschopp/TSCHOPP-PROJECT/Compe_02"
+BUCKET_NAME: "/home/tomas/Desktop/maestria/dm-eyf/competencia-02-bucket"
 
 competencia02:
-    DATA_PATH: "data/competencia.csv"
+    DATA_PATH: "/home/tomas/Desktop/maestria/dm-eyf/competencia.csv"
     SEMILLA: [811157, 502717, 782911, 464939, 213713]
     MES_TRAIN: [202101, 202102, 202103]
     MES_VALIDACION: 202103

@@ -13,7 +13,7 @@ from .loader import convertir_clase_ternaria_a_target
 
 logger = logging.getLogger(__name__)
 
-def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling: float = 1) -> float:
+def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling: float = 1, semillas: list = None) -> float:
     """
     Parameters:
     trial: trial de optuna
@@ -32,20 +32,37 @@ def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling
     float: ganancia total
     """
     # Hiperparámetros a optimizar
+    num_leaves = trial.suggest_int('num_leaves', 8, 80)
+    learning_rate = trial.suggest_float('learning_rate', 0.01, 0.4)
+    max_depth = trial.suggest_int("max_depth", -1, 100)
+    min_data_in_leaf = trial.suggest_int('min_data_in_leaf', 1, 1000)
+    min_sum_hessian_in_leaf = trial.suggest_int('min_sum_hessian_in_leaf', 0, 100)
+    bagging_fraction = trial.suggest_float('bagging_fraction', 0.1, 0.9)
+    feature_fraction = trial.suggest_float('feature_fraction', 0.1, 0.9)
+    max_bin = trial.suggest_int('max_bin', 31, 50)
+    num_iterations = trial.suggest_int('num_iterations', 400, 1000)
+
     params = {
         'objective': 'binary',
-        'metric': 'None',  # Usamos nuestra métrica personalizada
-
-	#completar a gusto!!!!!!!
-
-
-        'min_gain_to_split': 0.0,  # Permitir splits con ganancia mínima
-        'verbose': -1,  # Reducir verbosidad
-        'verbosity': -1,  # Silenciar mensajes adicionales
-        'silent': True,  # Modo silencioso
-        'bin': 31,
-        'random_state': SEMILLA[0],  # Desde configuración YAML
-    }
+        'metric': 'auc',
+        'boosting_type': 'rf',
+        'first_metric_only': True,
+        'boost_from_average': True,
+        'feature_pre_filter': False,
+        'max_bin': max_bin,
+        'max_depth': max_depth,
+        'num_leaves': num_leaves,
+        'min_data_in_leaf': min_data_in_leaf,
+        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
+        'bagging_fraction': bagging_fraction,
+        'feature_fraction': feature_fraction,
+        'learning_rate': learning_rate,
+        'min_data_in_leaf': min_data_in_leaf,
+        'feature_fraction': feature_fraction,
+        'seed': semillas[4],
+        'verbose': -1,
+        'num_iterations': num_iterations
+        }
   
     if isinstance(MES_TRAIN, list):
         df_train = df[df['foto_mes'].isin(MES_TRAIN)]
@@ -258,6 +275,9 @@ from src.test_evaluation import evaluar_en_test, guardar_resultados_test
 from src.final_training import preparar_datos_entrenamiento_final, generar_predicciones_finales, entrenar_modelo_final
 from src.output_manager import guardar_predicciones_finales
 
+# Import DuckDB feature engineering
+from competencia_02_fe import DuckDBFeatureEngineering
+
 
 ## config basico logging
 os.makedirs(f"{BUCKET_NAME}/logs", exist_ok=True)
@@ -279,6 +299,105 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def duckdb_feature_engineering(data_path: str, output_path: str = None) -> str:
+    """
+    Perform feature engineering using DuckDB SQL
+    
+    Args:
+        data_path: Path to input CSV file
+        output_path: Path for output CSV file (optional)
+        
+    Returns:
+        str: Path to the processed CSV file
+    """
+    if output_path is None:
+        output_path = os.path.join(BUCKET_NAME, "data", f"df_fe_duckdb_{STUDY_NAME}.csv")
+    
+    logger.info("🔧 Starting DuckDB feature engineering...")
+    
+    with DuckDBFeatureEngineering() as fe:
+        # Load CSV data
+        fe.load_csv(data_path, "competencia_01_fe")
+        
+        # Define feature engineering SQL
+        feature_engineering_sql = """
+        SELECT 
+            *,
+            -- Lag features for key variables
+            LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag1,
+            LAG(cpayroll_trx, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag2,
+            LAG(cpayroll_trx, 3) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag3,
+            
+            LAG(ctrx_quarter, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag1,
+            LAG(ctrx_quarter, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag2,
+            LAG(ctrx_quarter, 3) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag3,
+            
+            -- Delta features
+            cpayroll_trx - LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_delta1,
+            cpayroll_trx - LAG(cpayroll_trx, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_delta2,
+            
+            ctrx_quarter - LAG(ctrx_quarter, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_delta1,
+            ctrx_quarter - LAG(ctrx_quarter, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_delta2,
+            
+            -- Rolling statistics
+            AVG(cpayroll_trx) OVER (
+                PARTITION BY numero_de_cliente 
+                ORDER BY foto_mes 
+                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+            ) as cpayroll_trx_avg3m,
+            
+            STDDEV(cpayroll_trx) OVER (
+                PARTITION BY numero_de_cliente 
+                ORDER BY foto_mes 
+                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+            ) as cpayroll_trx_std3m,
+            
+            AVG(ctrx_quarter) OVER (
+                PARTITION BY numero_de_cliente 
+                ORDER BY foto_mes 
+                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+            ) as ctrx_quarter_avg3m,
+            
+            STDDEV(ctrx_quarter) OVER (
+                PARTITION BY numero_de_cliente 
+                ORDER BY foto_mes 
+                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+            ) as ctrx_quarter_std3m,
+            
+            -- Ratio features
+            CASE 
+                WHEN ctrx_quarter > 0 THEN cpayroll_trx / ctrx_quarter 
+                ELSE 0 
+            END as payroll_to_trx_ratio,
+            
+            -- Time-based features
+            EXTRACT(MONTH FROM foto_mes) as mes,
+            EXTRACT(QUARTER FROM foto_mes) as quarter,
+            
+            -- Binary features
+            CASE WHEN cpayroll_trx > 0 THEN 1 ELSE 0 END as has_payroll,
+            CASE WHEN ctrx_quarter > 0 THEN 1 ELSE 0 END as has_transactions,
+            
+            -- Interaction features
+            cpayroll_trx * ctrx_quarter as payroll_trx_interaction
+        FROM competencia_01_fe
+        """
+        
+        # Execute feature engineering
+        fe.execute_sql(feature_engineering_sql, "competencia_01_fe")
+        
+        # Get table info
+        info = fe.get_table_info("competencia_01_fe")
+        logger.info(f"✅ Feature engineering completed: {info['row_count']} rows, {info['column_count']} columns")
+        
+        # Export to CSV
+        fe.export_to_csv("competencia_01_fe", output_path)
+        
+        logger.info(f"💾 Exported engineered features to: {output_path}")
+        
+        return output_path
+
+
 ## Funcion principal
 def main():
     logger.info("Inicio de ejecucion.")
@@ -289,31 +408,36 @@ def main():
     print(data_path)
     df = cargar_datos(data_path)   
 
-    #01 Feature Engineering
+    #01 Feature Engineering with DuckDB
   
     #####
-    #COMO SE QUE LES GUSTA MUCHO LO ANTERIOR Y LES LLEVA MUCHO TIEMPO 🙄
-    #
-    #Corroborando si existe antes
-    #Cargar el df_fe
-    #
-    #Guardar el df_fe para no tener que hacerlo de nuevo
-    #
+    # DuckDB Feature Engineering - Fast SQL-based feature creation
     #####
 
-    if os.path.exists(os.path.join(BUCKET_NAME, "data", f"df_fe{STUDY_NAME}.csv")):
-        logger.info("✅ df_fe.csv encontrado")
-        df_fe = pd.read_csv(os.path.join(BUCKET_NAME, "data", f"df_fe{STUDY_NAME}.csv"))
+    # Check if DuckDB features already exist
+    duckdb_fe_path = os.path.join(BUCKET_NAME, "data", f"df_fe_duckdb_{STUDY_NAME}.csv")
+    
+    if os.path.exists(duckdb_fe_path):
+        logger.info("✅ DuckDB df_fe.csv encontrado")
+        df_fe = pd.read_csv(duckdb_fe_path)
     else:
-        logger.info("❌ df_fe.csv no encontrado")
-        atributos = [col for col in df.columns if col.startswith(('c', 'm'))]
-        atributos.remove("clase_ternaria")
-        cant_lag = 2
-        df_fe = feature_engineering_lag(df, atributos, cant_lag)
-        df_fe = feature_engineering_delta_lag(df, atributos, cant_lag)
-        logger.info(f"Feature Engineering completado: {df_fe.shape}")
-        logger.info("Guardando df_fe.csv")
-        df_fe.to_csv(os.path.join(BUCKET_NAME, "data", f"df_fe{STUDY_NAME}.csv"), index=False)
+        logger.info("❌ DuckDB df_fe.csv no encontrado - creando con SQL")
+        
+        # First save the raw data as CSV for DuckDB
+        raw_data_path = os.path.join(BUCKET_NAME, "data", f"raw_data_{STUDY_NAME}.csv")
+        df.to_csv(raw_data_path, index=False)
+        logger.info(f"💾 Raw data saved to: {raw_data_path}")
+        
+        # Use DuckDB for feature engineering
+        df_fe_path = duckdb_feature_engineering(raw_data_path, duckdb_fe_path)
+        
+        # Load the engineered features
+        df_fe = pd.read_csv(df_fe_path)
+        logger.info(f"✅ DuckDB Feature Engineering completado: {df_fe.shape}")
+        
+        # Clean up raw data file
+        if os.path.exists(raw_data_path):
+            os.remove(raw_data_path)
 
 
     #03 Ejecutar optimizacion de hiperparametros
