@@ -2,215 +2,142 @@
 import duckdb
 import pandas as pd
 import logging
+import yaml
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-class DuckDBFeatureEngineering:
-    
-    def __init__(self, db_path: str = None):
-        """
-        Initialize DuckDB connection
-        
-        Args:
-            db_path: Path to DuckDB database file (None for in-memory)
-        """
-        self.conn = duckdb.connect(db_path) if db_path else duckdb.connect()
-        self.db_path = db_path
-        
-    def __enter__(self):
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-        
-    def close(self):
-        if self.conn:
-            self.conn.close()
-    
-    def load_csv(self, csv_path: str, table_name: str = "competencia_02_fe") -> None:
-        """
-        Load CSV file into DuckDB table using read_csv_auto
-        
-        Args:
-            csv_path: Path to CSV file
-            table_name: Name of the table to create
-        """
-        try:
-            # Use DuckDB's read_csv_auto for automatic type inference
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {table_name} AS
-                SELECT *
-                FROM read_csv_auto('{csv_path}')
-            """)
-            
-            # Get basic info about loaded data
-            result = self.conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
-            logger.info(f"✅ Loaded {result[0]} rows into table '{table_name}' from {csv_path}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error loading CSV from {csv_path}: {e}")
-            raise
-    
-    def execute_sql(self, full_query: str, table_name: str = "competencia_02_fe") -> None:
-        """
-        Execute SQL query and replace table
-        
-        Args:
-            sql_query: SQL query to execute
-            table_name: Name of the table to create/replace
-        """
-        try:          
-            self.conn.execute(full_query)
-            
-            result = self.conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
-            logger.info(f"✅ SQL executed successfully. Result: {result[0]} rows in '{table_name}'")
-            
-        except Exception as e:
-            logger.error(f"❌ Error executing SQL: {e}")
-            logger.error(f"Query: {full_query}")
-            raise
-    
-    def export_to_csv(self, table_name: str, output_path: str) -> None:
-        """
-        Export table to CSV file
-        
-        Args:
-            table_name: Name of table to export
-            output_path: Output CSV file path
-        """
-        try:
-            self.conn.execute(f"COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)")
-            logger.info(f"✅ Exported table '{table_name}' to {output_path}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error exporting to CSV: {e}")
-            raise
-    
-    def get_table_info(self, table_name: str) -> dict:
-        """
-        Get basic information about a table
-        
-        Args:
-            table_name: Name of the table
-            
-        Returns:
-            dict: Table information
-        """
-        try:
-            # Get row count
-            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            
-            # Get column info
-            columns = self.conn.execute(f"""
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = '{table_name}'
-                ORDER BY ordinal_position
-            """).fetchall()
-            
-            return {
-                'row_count': row_count,
-                'columns': columns,
-                'column_count': len(columns)
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting table info: {e}")
-            return {}
-    
-    def preview_table(self, table_name: str, limit: int = 5) -> pd.DataFrame:
-        """
-        Preview table data
-        
-        Args:
-            table_name: Name of the table
-            limit: Number of rows to preview
-            
-        Returns:
-            pd.DataFrame: Preview of the table
-        """
-        try:
-            return self.conn.execute(f"SELECT * FROM {table_name} LIMIT {limit}").df()
-        except Exception as e:
-            logger.error(f"❌ Error previewing table: {e}")
-            return pd.DataFrame()
+def load_config(config_path: str) -> dict:
+    try:
+        with open(config_path, 'r', encoding='utf-8') as file:
+            config = yaml.safe_load(file)
+            logger.info(f"✅ Loaded configuration from {config_path}")
+            return config
+    except Exception as e:
+        logger.error(f"❌ Error loading config from {config_path}: {e}")
+        return {}
 
-def simple_feature_engineering_example():
-    """Example of how to use the DuckDBFeatureEngineering class"""
+def generate_feature_engineering_sql() -> str:
+    """Generate the complete feature engineering SQL query dynamically"""
+    
+    # List of columns to create delta features for
+    columns = [
+        'active_quarter', 'mrentabilidad', 'mrentabilidad_annual', 'mcomisiones', 'mactivos_margen',
+        'mpasivos_margen', 'cproductos', 'ccuenta_corriente', 'mcuenta_corriente_adicional',
+        'mcuenta_corriente', 'ccaja_ahorro', 'mcaja_ahorro', 'mcaja_ahorro_adicional',
+        'mcaja_ahorro_dolares', 'cdescubierto_preacordado', 'mcuentas_saldo', 'ctarjeta_debito',
+        'ctarjeta_debito_transacciones', 'mautoservicio', 'ctarjeta_visa', 'ctarjeta_visa_transacciones',
+        'mtarjeta_visa_consumo', 'ctarjeta_master', 'ctarjeta_master_transacciones', 'mtarjeta_master_consumo',
+        'cprestamos_personales', 'mprestamos_personales', 'cprestamos_prendarios', 'mprestamos_prendarios',
+        'mprestamos_hipotecarios', 'cplazo_fijo', 'mplazo_fijo_dolares', 'mplazo_fijo_pesos',
+        'cinversion1', 'minversion1_pesos', 'minversion1_dolares', 'cinversion2', 'minversion2',
+        'ccaja_seguridad', 'cpayroll_trx', 'mpayroll', 'mpayroll2', 'cpayroll2_trx',
+        'ccuenta_debitos_automaticos', 'mcuenta_debitos_automaticos', 'ctarjeta_visa_debitos_automaticos',
+        'mttarjeta_visa_debitos_automaticos', 'ctarjeta_master_debitos_automaticos', 'mttarjeta_master_debitos_automaticos',
+        'cpagodeservicios', 'mpagodeservicios', 'cpagomiscuentas', 'mpagomiscuentas',
+        'ccajeros_propios_descuentos', 'mcajeros_propios_descuentos', 'ctarjeta_visa_descuentos',
+        'mtarjeta_visa_descuentos', 'ctarjeta_master_descuentos', 'mtarjeta_master_descuentos',
+        'ccomisiones_mantenimiento', 'mcomisiones_mantenimiento', 'ccomisiones_otras', 'mcomisiones_otras',
+        'cforex', 'cforex_buy', 'mforex_buy', 'cforex_sell', 'mforex_sell',
+        'ctransferencias_recibidas', 'mtransferencias_recibidas', 'ctransferencias_emitidas', 'mtransferencias_emitidas',
+        'cextraccion_autoservicio', 'mextraccion_autoservicio', 'tcallcenter', 'ccallcenter_transacciones',
+        'chomebanking_transacciones', 'ccajas_consultas', 'ccajas_extracciones', 'ccajas_otras',
+        'catm_trx', 'matm', 'ctrx_quarter', 'cmobile_app_trx',
+        'Master_delinquency', 'Master_mfinanciacion_limite', 'Master_Fvencimiento', 'Master_Finiciomora',
+        'Master_msaldototal', 'Master_msaldopesos', 'Master_msaldodolares', 'Master_mconsumospesos',
+        'Master_mconsumosdolares', 'Master_mlimitecompra', 'Master_madelantopesos', 'Master_madelantodolares',
+        'Master_fultimo_cierre', 'Master_mpagado', 'Master_mpagospesos', 'Master_mpagosdolares',
+        'Master_mconsumototal', 'Master_cconsumos', 'Master_cadelantosefectivo', 'Master_mpagominimo',
+        'Visa_delinquency', 'Visa_mfinanciacion_limite', 'Visa_msaldototal', 'Visa_msaldopesos',
+        'Visa_msaldodolares', 'Visa_mconsumospesos', 'Visa_mconsumosdolares', 'Visa_mlimitecompra',
+        'Visa_madelantopesos', 'Visa_madelantodolares', 'Visa_fultimo_cierre', 'Visa_mpagado',
+        'Visa_mpagospesos', 'Visa_mpagosdolares', 'Visa_mconsumototal', 'Visa_cconsumos'
+    ]
+    
+    # Generate delta features for each column
+    delta_features = []
+    sum_delta_features = []
+    
+    for col in columns:
+        # Delta 1 and 2 features
+        delta_features.append(f"t1.{col} - lag(t1.{col}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_1_{col}")
+        delta_features.append(f"t1.{col} - lag(t1.{col}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_2_{col}")
+        
+        # Sum of deltas features
+        sum_delta_features.append(f"(t1.{col} - lag(t1.{col}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes)) + (t1.{col} - lag(t1.{col}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes)) as sum_deltas_{col}")
+    
+    # Build the complete SQL query
+    sql_query = f"""
+    CREATE OR REPLACE TABLE competencia_01_fe AS
+    SELECT
+      t1.*,
+      {',\n      '.join(delta_features)},
+      {',\n      '.join(sum_delta_features)}
+    FROM competencia_01_fe t1
+    ORDER BY t1.numero_de_cliente, t1.foto_mes
+    """
+    
+    return sql_query
+
+def run_feature_engineering():
+    """Run feature engineering with DuckDB using config file"""
     
     # Setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
-    # Example usage
-    with DuckDBFeatureEngineering() as fe:
+    # Load configuration
+    config_path = "config-dev.yml"
+    config = load_config(config_path)
+    
+    if not config:
+        logger.error("Failed to load configuration")
+        return
+    
+    # Get dataset path from config
+    dataset_path = config.get("DATASET_TERNARIA_PATH")
+    if not dataset_path:
+        logger.error("No DATA_PATH found in config")
+        return
+    
+    logger.info(f"Dataset path: {dataset_path}")
+    
+    # Initialize DuckDB connection
+    conn = duckdb.connect()
+    
+    try:
+        # Load the dataset
+        logger.info("Loading dataset...")
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE competencia_01_fe AS
+            SELECT *
+            FROM read_csv_auto('{dataset_path}')
+        """)
         
-        # Example: Load a CSV file (replace with your actual path)
-        # fe.load_csv("path/to/your/data.csv", "competencia_01_fe")
+        # Get basic info
+        result = conn.execute("SELECT COUNT(*) as row_count FROM competencia_01_fe").fetchone()
+        logger.info(f"✅ Loaded {result[0]} rows")
         
-        # For demo, create sample data
-        logger.info("Creating sample data for demonstration...")
-        import numpy as np
+        # Execute feature engineering SQL
+        logger.info("Executing feature engineering...")
         
-        sample_data = pd.DataFrame({
-            'numero_de_cliente': range(1, 1001),
-            'foto_mes': np.random.choice([202101, 202102, 202103, 202104], 1000),
-            'cpayroll_trx': np.random.poisson(3, 1000),
-            'ctrx_quarter': np.random.poisson(8, 1000),
-            'clase_ternaria': np.random.choice(['CONTINUA', 'BAJA+1', 'BAJA+2'], 1000, p=[0.7, 0.2, 0.1])
-        })
+        # Generate the complete feature engineering SQL query
+        feature_sql = generate_feature_engineering_sql()
         
-        # Register sample data as table
-        fe.conn.register('competencia_01_fe', sample_data)
+        conn.execute(feature_sql)
         
-        # Example SQL feature engineering
-        feature_engineering_sql = """
-        SELECT 
-            *,
-            -- Lag features
-            LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag1,
-            LAG(cpayroll_trx, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag2,
-            
-            -- Delta features
-            cpayroll_trx - LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_delta1,
-            
-            -- Rolling statistics
-            AVG(cpayroll_trx) OVER (
-                PARTITION BY numero_de_cliente 
-                ORDER BY foto_mes 
-                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-            ) as cpayroll_trx_avg3m,
-            
-            -- Ratio features
-            CASE 
-                WHEN ctrx_quarter > 0 THEN cpayroll_trx / ctrx_quarter 
-                ELSE 0 
-            END as payroll_to_trx_ratio,
-            
-            -- Time features
-            EXTRACT(MONTH FROM foto_mes) as mes,
-            
-            -- Binary features
-            CASE WHEN cpayroll_trx > 0 THEN 1 ELSE 0 END as has_payroll
-        FROM competencia_01_fe
-        """
+        # Export results
+        output_path = config["DATASET_FE_PATH"]
+        conn.execute(f"COPY competencia_01_fe TO '{output_path}' (FORMAT CSV, HEADER)")
+        logger.info(f"✅ Exported results to {output_path}")
         
-        # Execute feature engineering
-        fe.execute_sql(feature_engineering_sql, "competencia_01_fe")
+        # Show final info
+        result = conn.execute("SELECT COUNT(*) as row_count FROM competencia_01_fe").fetchone()
+        logger.info(f"✅ Final dataset: {result[0]} rows")
         
-        # Get table info
-        info = fe.get_table_info("competencia_01_fe")
-        logger.info(f"Table info: {info['row_count']} rows, {info['column_count']} columns")
-        
-        # Preview the data
-        preview = fe.preview_table("competencia_01_fe", limit=3)
-        logger.info("Preview of engineered data:")
-        logger.info(f"\n{preview}")
-        
-        # Export to CSV
-        fe.export_to_csv("competencia_01_fe", "engineered_features.csv")
-        
-        logger.info("✅ Feature engineering example completed!")
+    except Exception as e:
+        logger.error(f"❌ Error during feature engineering: {e}")
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
-    simple_feature_engineering_example()
+    run_feature_engineering()
