@@ -4,6 +4,7 @@ import lightgbm as lgb
 import pandas as pd
 import numpy as np
 import logging
+import yaml
 import json
 import os
 from datetime import datetime
@@ -12,6 +13,17 @@ from .gain_function import calcular_ganancia, ganancia_lgb_binary, ganancia_eval
 from .loader import convertir_clase_ternaria_a_target
 
 logger = logging.getLogger(__name__)
+
+
+def load_config(config_path: str) -> dict:
+    try:
+        with open(config_path, 'r', encoding='utf-8') as file:
+            config = yaml.safe_load(file)
+            logger.info(f"✅ Loaded configuration from {config_path}")
+            return config
+    except Exception as e:
+        logger.error(f"❌ Error loading config from {config_path}: {e}")
+        return {}
 
 def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling: float = 1, semillas: list = None) -> float:
     """
@@ -79,16 +91,8 @@ def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling
     df_train['clase_ternaria'] = df_train['clase_ternaria'].astype(np.int8)
     df_val['clase_ternaria'] = df_val['clase_ternaria'].astype(np.int8)
 
-    # Usar target (clase_ternaria ya convertida a binaria)
-  
-    # Features: usar todas las columnas excepto target
-  
-    # Entrenar modelo con función de ganancia personalizada
+ 
 
-  
-    #####
-    #ESTO NO ES OPTIMO!
-    #####
     model = lgb.train(
         params,
         train_data,
@@ -402,19 +406,18 @@ def duckdb_feature_engineering(data_path: str, output_path: str = None) -> str:
 def main():
     logger.info("Inicio de ejecucion.")
 
-    #00 Cargar datos
+    config_path = "config-dev.yml"
+    config = load_config(config_path)
+
+    BUCKET_NAME = config["BUCKET_NAME"]
+    DATA_PATH = config["DATA_PATH"]
+    STUDY_NAME = config["STUDY_NAME"]
+    
     os.makedirs(f"{BUCKET_NAME}/data", exist_ok=True)
-    data_path = os.path.join(BUCKET_NAME, DATA_PATH)
+    data_path = os.path.join(BUCKET_NAME, data_path)
     print(data_path)
     df = cargar_datos(data_path)   
 
-    #01 Feature Engineering with DuckDB
-  
-    #####
-    # DuckDB Feature Engineering - Fast SQL-based feature creation
-    #####
-
-    # Check if DuckDB features already exist
     duckdb_fe_path = os.path.join(BUCKET_NAME, "data", f"df_fe_duckdb_{STUDY_NAME}.csv")
     
     if os.path.exists(duckdb_fe_path):

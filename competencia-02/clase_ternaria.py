@@ -9,20 +9,20 @@ with open("config-dev.yml", "r") as file:
 
 dataset_crudo_file = config["DATASET_CRUDO_PATH"]
 dataset_ternaria = config["DATASET_TERNARIA_PATH"]
-
+table_name = config["TABLE_NAME"]
 conn = duckdb.connect()
 
 conn.execute(f"""
-    CREATE OR REPLACE TABLE competencia_01_crudo AS
+    CREATE OR REPLACE TABLE {table_name} AS
     SELECT *
     FROM read_csv_auto('{dataset_crudo_file}')
 """)
 
 # Check the loaded data
-result = conn.execute("SELECT COUNT(*) FROM competencia_01_crudo").fetchone()
+result = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
 print(f"Loaded {result[0]} rows from {dataset_crudo_file}")
 
-clase_ternaria_query = """
+clase_ternaria_query = f"""
 SELECT 
     t1.*,
     CASE
@@ -45,14 +45,14 @@ SELECT
         THEN 'BAJA+1'
         ELSE 'BAJA+2'
     END AS clase_ternaria
-FROM competencia_01_crudo t1
+FROM {table_name} t1
 """
 
 result_df = conn.execute(clase_ternaria_query).df()
 result_df.to_csv(dataset_ternaria, index=False)
 print(f"Saved {len(result_df)} rows to {dataset_ternaria}")
 
-summary = conn.execute("""
+summary = conn.execute(f"""
     SELECT foto_mes, clase_ternaria, COUNT(*) as count
     FROM (
         SELECT 
@@ -77,7 +77,7 @@ summary = conn.execute("""
                 THEN 'BAJA+1'
                 ELSE 'BAJA+2'
             END AS clase_ternaria
-        FROM competencia_01_crudo t1
+        FROM {table_name} t1
     ) t
     GROUP BY foto_mes, clase_ternaria
     ORDER BY foto_mes ASC, clase_ternaria ASC

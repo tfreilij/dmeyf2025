@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 import duckdb
-import pandas as pd
+import polars as pl
 import logging
 import yaml
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+col_drops = {
+          "numero_de_cliente", "foto_mes", "active_quarter", "clase_ternaria",
+          "cliente_edad", "cliente_antiguedad",
+          "Visa_fultimo_cierre", "Master_fultimo_cierre",
+          "Visa_Fvencimiento", "Master_Fvencimiento"
+      }
+
 
 def load_config(config_path: str) -> dict:
     try:
@@ -17,9 +25,9 @@ def load_config(config_path: str) -> dict:
         logger.error(f"❌ Error loading config from {config_path}: {e}")
         return {}
 
-def generate_feature_engineering_sql() -> str:
+def generate_feature_engineering_sql(diccionario_datos, table_name) -> str:
     """Generate the complete feature engineering SQL query dynamically"""
-    
+    logger.info("Generate Feature Engineering SQL")
     # List of columns to create delta features for
     columns = [
         'active_quarter', 'mrentabilidad', 'mrentabilidad_annual', 'mcomisiones', 'mactivos_margen',
@@ -58,23 +66,26 @@ def generate_feature_engineering_sql() -> str:
     delta_features = []
     sum_delta_features = []
     
-    for col in columns:
-        # Delta 1 and 2 features
-        delta_features.append(f"t1.{col} - lag(t1.{col}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_1_{col}")
-        delta_features.append(f"t1.{col} - lag(t1.{col}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_2_{col}")
-        
-        # Sum of deltas features
-        sum_delta_features.append(f"(t1.{col} - lag(t1.{col}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes)) + (t1.{col} - lag(t1.{col}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes)) as sum_deltas_{col}")
+    col_pesos = diccionario_datos.filter(pl.col("unidad") == "pesos").select(pl.col("campo"))
+    query_deltas = ""
+    for c in col_pesos["campo"].to_list():
+        if c in ["mtarjeta_visa_debitos_automaticos"]:
+            continue
+        delta_1 = f"t1.{c} - lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_1_{c} , \n"
+        delta_2 = f"t1.{c} - lag(t1.{c}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_2_{c} , \n"
+        sum_delta_2 = f"(t1.{c} - lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes)) + (lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) - lag(t1.{c}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes)) as sum_delta_{c},"
+
+        query_deltas = query_deltas + delta_1 + delta_2 + sum_delta_2
+
     
     # Build the complete SQL query
     sql_query = f"""
-    CREATE OR REPLACE TABLE competencia_01_fe AS
+    CREATE OR REPLACE TABLE {table_name} AS
     SELECT
-      t1.*,
-      {',\n      '.join(delta_features)},
-      {',\n      '.join(sum_delta_features)}
-    FROM competencia_01_fe t1
-    ORDER BY t1.numero_de_cliente, t1.foto_mes
+        t1.*,
+        {query_deltas}
+    FROM {table_name} t1
+    ORDER BY t1.numero_de_cliente, t1.foto_mes;
     """
     
     return sql_query
@@ -82,10 +93,8 @@ def generate_feature_engineering_sql() -> str:
 def run_feature_engineering():
     """Run feature engineering with DuckDB using config file"""
     
-    # Setup logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
-    # Load configuration
     config_path = "config-dev.yml"
     config = load_config(config_path)
     
@@ -93,7 +102,6 @@ def run_feature_engineering():
         logger.error("Failed to load configuration")
         return
     
-    # Get dataset path from config
     dataset_path = config.get("DATASET_TERNARIA_PATH")
     if not dataset_path:
         logger.error("No DATA_PATH found in config")
@@ -101,37 +109,34 @@ def run_feature_engineering():
     
     logger.info(f"Dataset path: {dataset_path}")
     
-    # Initialize DuckDB connection
     conn = duckdb.connect()
-    
+    table_name = config.get("TABLE_NAME")
     try:
-        # Load the dataset
         logger.info("Loading dataset...")
         conn.execute(f"""
-            CREATE OR REPLACE TABLE competencia_01_fe AS
+            CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_csv_auto('{dataset_path}')
         """)
-        
-        # Get basic info
-        result = conn.execute("SELECT COUNT(*) as row_count FROM competencia_01_fe").fetchone()
+
+        result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
         logger.info(f"✅ Loaded {result[0]} rows")
         
-        # Execute feature engineering SQL
         logger.info("Executing feature engineering...")
         
-        # Generate the complete feature engineering SQL query
-        feature_sql = generate_feature_engineering_sql()
+        diccionario_datos = config.get("DICCIONARIO_DATOS")
+        diccionario_datos = pl.read_csv(diccionario_datos)
+
+        feature_sql = generate_feature_engineering_sql(diccionario_datos,table_name)
         
+        logger.info("Execute Query " + feature_sql)
         conn.execute(feature_sql)
         
-        # Export results
         output_path = config["DATASET_FE_PATH"]
-        conn.execute(f"COPY competencia_01_fe TO '{output_path}' (FORMAT CSV, HEADER)")
+        conn.execute(f"COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)")
         logger.info(f"✅ Exported results to {output_path}")
         
-        # Show final info
-        result = conn.execute("SELECT COUNT(*) as row_count FROM competencia_01_fe").fetchone()
+        result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
         logger.info(f"✅ Final dataset: {result[0]} rows")
         
     except Exception as e:
