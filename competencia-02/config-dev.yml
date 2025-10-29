@@ -8,6 +8,7 @@ DATASET_CRUDO_PATH: "competencia_01_crudo.csv"
 DATASET_TERNARIA_PATH: "competencia_01.csv"
 
 DICCIONARIO_DATOS: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/dmeyf2025/competencia-02/diccionario_datos.csv"
+MODELOS_PATH = "modelos/"
 
 competencia02:
     DATASET_FE_PATH: "competencia_01_fe.csv"

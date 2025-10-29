@@ -6,6 +6,9 @@ import numpy as np
 import logging
 import yaml
 import os
+import datetime
+from lightgbm import LGBMClassifier
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 
 
 logger = logging.getLogger(__name__)
@@ -29,9 +32,26 @@ STUDY_NAME = config["STUDY_NAME"]
 DATASET_FE_PATH = config["DATASET_FE_PATH"]
 GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
 COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
+FINAL_PREDICT = config["FINAL_PREDICT"]
+MES_TEST = config["MES_TEST"]
+FINAL_TRAIN = config["FINAL_TRAIN"]
+SEMILLA = config["SEMILLA"]
+MODELOS_PATH = config["MODELOS_PATH"]
+
+debug = False
+run_bayesian_optimization = False
+submit = False
+submission_number = 1
+
+estudio = 1
+
+threshold = 0.15
 
 
-df = pl.read_csv(dataset_path + dataset_file)
+
+
+
+df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_PATH))
 
 df = df.with_columns(
     pl.lit(1.0).alias('clase_peso')
@@ -47,6 +67,38 @@ df = df.with_columns(
     .alias('clase_peso')
 )
 
+clientes_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
+
+clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
+
+
+df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares'])
+
+df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
+df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
+df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
+
+df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
+
+df_train = df_train.drop(['foto_mes'])
+df_test = df_test.drop(['foto_mes'])
+df_predict = df_predict.drop(['foto_mes'])
+df_train_predict = df_train_predict.drop(['foto_mes'])
+
+df_train_weight = df_train['clase_peso']
+df_train_clase_binaria_baja = df_train['clase_binaria']
+df_test_clase_binaria_baja = df_test['clase_binaria']
+
+df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
+df_train_predict_weight = df_train_predict['clase_peso']
+
+df_train = df_train.drop(['clase_binaria','clase_peso'])
+df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso'])
+df_test = df_test.drop(['clase_binaria','clase_peso'])
+df_predict = df_predict.drop(['clase_binaria','clase_peso'])
+
+df_val = df_train(pl.col('foto_mes').is_in(MES_VALIDACION))
+
 def lgb_gan_eval(y_pred, data):
     weight = data.get_weight()
     ganancia = np.where(weight == 1.00002, GANANCIA_ACIERTO, 0) - np.where(weight < 1.00002, COSTO_ESTIMULO, 0)
@@ -55,7 +107,10 @@ def lgb_gan_eval(y_pred, data):
 
     return 'gan_eval', np.max(ganancia) , True
 
-def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float = 1, semillas: list = None) -> float:
+sss_opt = StratifiedShuffleSplit(n_splits=5, test_size=0.3, random_state=SEMILLA[1])
+resultados_medias = []
+
+def objective(trial, X, y, weight, sss) -> float:
     """
     Parameters:
     trial: trial de optuna
@@ -76,13 +131,11 @@ def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float 
     # Hiperparámetros a optimizar
     num_leaves = trial.suggest_int('num_leaves', 8, 80)
     learning_rate = trial.suggest_float('learning_rate', 0.01, 0.4)
-    max_depth = trial.suggest_int("max_depth", -1, 100)
+    max_depth = trial.suggest_int("max_depth", -1, 50)
     min_data_in_leaf = trial.suggest_int('min_data_in_leaf', 1, 1000)
-    min_sum_hessian_in_leaf = trial.suggest_int('min_sum_hessian_in_leaf', 0, 100)
-    bagging_fraction = trial.suggest_float('bagging_fraction', 0.1, 0.9)
-    feature_fraction = trial.suggest_float('feature_fraction', 0.1, 0.9)
-    max_bin = trial.suggest_int('max_bin', 31, 50)
-    num_iterations = trial.suggest_int('num_iterations', 400, 1000)
+    feature_fraction = trial.suggest_float('feature_fraction', 0.1, 1.0)
+    max_bin = trial.suggest_int('max_bin', 255, 500)
+    num_iterations = trial.suggest_int('num_iterations', 100, 500)
 
     params = {
         'objective': 'binary',
@@ -94,20 +147,19 @@ def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float 
         'max_bin': max_bin,
         'max_depth': max_depth,
         'num_leaves': num_leaves,
-        'min_data_in_leaf': min_data_in_leaf,
-        'min_sum_hessian_in_leaf': min_sum_hessian_in_leaf,
-        'bagging_fraction': bagging_fraction,
-        'feature_fraction': feature_fraction,
         'learning_rate': learning_rate,
         'min_data_in_leaf': min_data_in_leaf,
         'feature_fraction': feature_fraction,
-        'seed': semillas[4],
+        'seed': SEMILLA[1],
         'verbose': -1,
         'num_iterations': num_iterations
         }
+
+    train_data = lgb.Dataset(X,
+                                label=y,
+                                weight=weight)
   
 
-    
     if isinstance(MES_TRAIN, list):
         df_train = df[df['foto_mes'].isin(MES_TRAIN)]
     else:
@@ -115,14 +167,6 @@ def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float 
   
     df_val = df[df['foto_mes'] == MES_VALIDACION]
   
-    #Convierto a binaria la clase ternaria, 
-    # para entrenar el modelo Baja+1 y Baja+2 == 1
-    # y calcular la ganancia de validacion Baja+2 solamente en 1
-    df_train = convertir_clase_ternaria_a_target(df_train, baja_2_1=True)
-    df_val = convertir_clase_ternaria_a_target(df_val, baja_2_1=False)
-    df_train['clase_ternaria'] = df_train['clase_ternaria'].astype(np.int8)
-    df_val['clase_ternaria'] = df_val['clase_ternaria'].astype(np.int8)
-
  
 
     model = lgb.train(
@@ -134,10 +178,10 @@ def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float 
     )
   
     # Predecir y calcular ganancia
-    y_pred_proba = model.predict(X_val)
+    y_pred_proba = model.predict(df_val)
   
     #COMO OBSERVARON USO LA MISMA FUNCION DE GANANCIA PARA ENTRENAR Y VALIDAR, CAMBIEN A GUSTO!!!!!
-    _, ganancia_total, _ = ganancia_evaluator(y_pred_proba, val_data)
+    _, ganancia_total, _ = ganancia_evaluator(y_pred_proba, df_val)
 
     # Guardar cada iteración en JSON
     guardar_iteracion(trial, ganancia_total)
@@ -147,154 +191,34 @@ def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float 
     return ganancia_total
 
 
-def crear_o_cargar_estudio(study_name: str = None, semilla = None) -> optuna.Study:
-    """
-    Crea un nuevo estudio de Optuna o carga uno existente desde SQLite.
-  
-    Args:
-        study_name: Nombre del estudio (si es None, usa STUDY_NAME del config)
-        semilla: Semilla para reproducibilidad
-  
-    Returns:
-        optuna.Study: Estudio de Optuna (nuevo o cargado)
-    """
- 
-    if semilla is None:
-        semilla = semilla[0] if isinstance(semilla, list) else semilla
-  
-    config_path = "config-dev.yml"
-    config = load_config(config_path)
-
-    path_db = os.path.join(BUCKET, "optuna_db")
-    os.makedirs(path_db, exist_ok=True)
-  
-    db_file = os.path.join(path_db, f"{study_name}.db")
-    storage = f"sqlite:///{db_file}"
-  
-    # Verificar si existe un estudio previo
-    if os.path.exists(db_file):
-        logger.info(f"⚡ Base de datos encontrada: {db_file}")
-        logger.info(f"🔄 Cargando estudio existente: {study_name}")
-  
-        try:
-            #PRESTAR ATENCION Y RAZONAR!!!
-            study = optuna.load_study(study_name=study_name, storage=storage)
-            n_trials_previos = len(study.trials)
-  
-            logger.info(f"✅ Estudio cargado exitosamente")
-            logger.info(f"📊 Trials previos: {n_trials_previos}")
-  
-            if n_trials_previos > 0:
-                logger.info(f"🏆 Mejor ganancia hasta ahora: {study.best_value:,.0f}")
-  
-            return study
-  
-        except Exception as e:
-            logger.warning(f"⚠️ No se pudo cargar el estudio: {e}")
-            logger.info(f"🆕 Creando nuevo estudio...")
-    else:
-        logger.info(f"🆕 No se encontró base de datos previa")
-        logger.info(f"📁 Creando nueva base de datos: {db_file}")
-  
-    # Crear nuevo estudio
-    study = optuna.create_study(
-        #COMPLETAR
-    )
-  
-    logger.info(f"✅ Nuevo estudio creado: {study_name}")
-    logger.info(f"💾 Storage: {storage}")
-  
-    return study
 
 
 
-def optimizar(df: pl.DataFrame, n_trials: int, mes_train : list, mes_validacion : list , semilla : int, study_name: str = None, undersampling: float = 0.01) -> optuna.Study:
-    """
-    Args:
-        df: DataFrame con datos
-        n_trials: Número de trials a ejecutar
-        study_name: Nombre del estudio (si es None, usa el de config.yaml)
-        undersampling: Undersampling para entrenamiento
-  
-    Description:
-       Ejecuta optimización bayesiana de hiperparámetros usando configuración YAML.
-       Guarda cada iteración en un archivo JSON separado. 
-       Pasos:
-        1. Crear estudio de Optuna
-        2. Ejecutar optimización
-        3. Retornar estudio
+storage_name = f"sqlite:////{os.path.join(BUCKET,STUDY_NAME)}.db"
+study_name = f"exp_comp_2_{estudio}_lgbm-opt"
 
-    Returns:
-        optuna.Study: Estudio de Optuna con resultados
-    """
+study = optuna.create_study(
+    direction="maximize",
+    study_name=study_name,
+    storage=storage_name,
+    load_if_exists=True,
+)
 
-    logger.info(f"Iniciando optimización con {n_trials} trials")
-    logger.info(f"Configuración: TRAIN={mes_train}, VALID={mes_validacion}, SEMILLA={semilla}")
-  
-    study = crear_o_cargar_estudio(study_name, semilla)
-
-    trials_previos = len(study.trials)
-    trials_a_ejecutar = max(0, n_trials - trials_previos)
-  
-    if trials_previos > 0:
-        logger.info(f"🔄 Retomando desde trial {trials_previos}")
-        logger.info(f"📝 Trials a ejecutar: {trials_a_ejecutar} (total objetivo: {n_trials})")
-    else:
-        logger.info(f"🆕 Nueva optimización: {n_trials} trials")
-  
-    if trials_a_ejecutar > 0:
-        study.optimize(lambda trial: objetivo_ganancia(trial, df, undersampling), n_trials=trials_a_ejecutar)
-        logger.info(f"🏆 Mejor ganancia: {study.best_value:,.0f}")
-        logger.info(f"Mejores parámetros: {study.best_params}")
-    else:
-        logger.info(f"✅ Ya se completaron {n_trials} trials")
-  
-    return study
+if run_bayesian_optimization:
+  study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight, sss_opt), n_trials=50)
 
 def aplicar_undersampling(df: pd.DataFrame, ratio: float, random_state: int = None) -> pd.DataFrame:
     pass
 
-# loader.py
-def convertir_clase_ternaria_a_target(df: pd.DataFrame, baja_2_1=True) -> pd.DataFrame:
-    """
-    Convierte clase_ternaria a target binario reemplazando en el mismo atributo:
-    - CONTINUA = 0
-    y segun los argumentos baja_2_1
-    baja_2_1 = true entonces: BAJA+1 y BAJA+2 = 1
-    baja_2_1 = false entonces: BAJA+1 = 0 y BAJA+2 = 1
-  
-    Args:
-        df: DataFrame con columna 'clase_ternaria'
-        baja_2_1: Booleano que indica si se considera BAJA+1 como positivo
-  
-    Returns:
-        pd.DataFrame: DataFrame con clase_ternaria convertida a valores binarios (0, 1)
-    """
 
-    #logger.info("Convirtiendo clase_ternaria a target binario")
-  
-    # Contar valores originales para logging (antes de modificar)
-
-  
-    # Modificar el DataFrame usando .loc para evitar SettingWithCopyWarning
-
-  
-    # Log de la conversión
-  
-    #logger.info(f"Conversión completada:")
-    #logger.info(f"  Original - CONTINUA: {n_continua_orig}, BAJA+1: {n_baja1_orig}, BAJA+2: {n_baja2_orig}")
-    #logger.info(f"  Binario - 0: {n_ceros}, 1: {n_unos}")
-    #logger.info(f"  Distribución: {n_unos/(n_ceros + n_unos)*100:.2f}% casos positivos")
-
-    return df
 
 ## config basico logging
-os.makedirs(f"{BUCKET_NAME}/logs", exist_ok=True)
+os.makedirs(f"{BUCKET}/logs", exist_ok=True)
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
 
-log_path =os.path.join(f"{BUCKET_NAME}/logs/", nombre_log)
+log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -308,31 +232,62 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-## Funcion principal
-def main():
-    logger.info("Inicio de ejecucion.")
 
-    config_path = "config-dev.yml"
-    config = load_config(config_path)
 
-    
-    data_fe_path = os.path.join(BUCKET,  DATASET_FE_PATH)
-    
-    data_fe = pl.read_csv(data_fe_path)
+def build_and_save_models(semillas, train_dataset, y_target, weight, is_test):
+  # Convert Polars DataFrames to Pandas DataFrames
+  train_dataset_pd = train_dataset.to_pandas()
+  y_target_pd = y_target.to_pandas()
+  weight_pd = weight.to_pandas()
 
-    study = optimizar(data_fe, n_trials=100, undersampling=0.02)
-  
-    logger.info("=== ANÁLISIS DE RESULTADOS ===")
-    trials_df = study.trials_dataframe()
-    if len(trials_df) > 0:
-        top_5 = trials_df.nlargest(5, 'value')
-        logger.info("Top 5 mejores trials:")
-        for idx, trial in top_5.iterrows():
-            logger.info(f"  Trial {trial['number']}: {trial['value']:,.0f}")
-  
-    logger.info("=== OPTIMIZACIÓN COMPLETADA ===")
+  train_data = lgb.Dataset(train_dataset_pd,
+                              label=y_target_pd,
+                              weight=weight_pd)
 
-    logger.info(f">>> Ejecución finalizada. Revisar logs para mas detalles.")
+  modelos = {}
+  print(f"Construimos los models para las semillas : {semillas}")
+
+  for seed in semillas:
+    print(f"Semilla: {seed}")
+
+    params = {
+            'objective': 'binary',
+              'metric': 'auc',
+              'boosting_type': 'rf',
+              'first_metric_only': True,
+              'boost_from_average': True,
+              'feature_pre_filter': False,
+              'max_bin': 31,
+              'seed': seed,
+              'verbose': -1
+        }
+
+
+    if run_bayesian_optimization:
+      best_iter = study.best_trial.user_attrs["best_iter"]
+      new_params = study.best_trial.params
+      new_params['n_estimators'] = best_iter
+    else:
+      # Corrida 1 y 3 son pésimas..
+      # Corrida 2 : new_params = {'num_leaves': 65, 'learning_rate': 0.22174535843285384, 'max_depth': 40, 'min_data_in_leaf': 161, 'feature_fraction': 0.5328801616449493, 'bagging_fraction': 0.1641705775874533, 'min_child_samples': 41, 'n_estimators': 403}
+      # Corrida 1 : new_params = {'num_leaves': 93, 'learning_rate': 0.15548003319593617, 'max_depth': 39, 'min_data_in_leaf': 759, 'feature_fraction': 0.119199901114561, 'bagging_fraction': 0.12291684731958094, 'min_child_samples': 30, 'n_estimators': 110}
+
+      # Corrida 4 : new_params = {'num_leaves': 54, 'learning_rate': 0.166278661717272, 'max_depth': 42, 'min_data_in_leaf': 310, 'feature_fraction': 0.45780488981801093, 'bagging_fraction': 0.2029691560601475, 'min_child_samples': 62, 'max_bin': 416, 'num_iterations': 343}
+      # Corrida 5 : new_params = {'num_leaves': 70, 'learning_rate': 0.16924391708150185, 'max_depth': 9, 'min_data_in_leaf': 510, 'feature_fraction': 0.5552248387271188, 'max_bin': 363, 'num_iterations': 372}
+
+      # Corrida 3 : new_params = {'num_leaves': 73, 'learning_rate': 0.2497842951354348, 'max_depth': 12, 'min_data_in_leaf': 633, 'feature_fraction': 0.17951553564916345, 'bagging_fraction': 0.7869774609783072, 'min_child_samples': 58, 'n_estimators': 582}
+      new_params = {'num_leaves': 54, 'learning_rate': 0.166278661717272, 'max_depth': 42, 'min_data_in_leaf': 310, 'feature_fraction': 0.45780488981801093, 'bagging_fraction': 0.2029691560601475, 'min_child_samples': 62, 'max_bin': 416, 'num_iterations': 343}
+
+    params.update(new_params)
+    model = lgb.train(params,
+                  train_data)
+
+    modelos[seed] = model
+    if is_test:
+      model.save_model(MODELOS_PATH + f'lgb_test_{seed}_{submission_number}.txt')
+    else:
+      model.save_model(MODELOS_PATH + f'lgb_predict_{seed}_{submission_number}.txt')
+  return modelos
 
 if __name__ == "__main__":
     main()
