@@ -1,14 +1,16 @@
 STUDY_NAME : "competencia-02-study-1-0"
 
-BUCKET_NAME: "/home/tomas/Desktop/maestria/dm-eyf/repo-propio/bucket"
+BUCKET: "/home/tomas/Desktop/maestria/dm-eyf/data/"
 
-DATASET_CRUDO_PATH: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/data/competencia_01_crudo.csv"
-DATASET_TERNARIA_PATH: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/data/competencia_01.csv"
-DATASET_FE_PATH: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/data/competencia_01_fe.csv"
-DICCIONARIO_DATOS: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/data/diccionario_datos.csv"
+DATASET_PATH: "/home/tomas/Desktop/maestria/dm-eyf/data/"
+
+DATASET_CRUDO_PATH: "competencia_01_crudo.csv"
+DATASET_TERNARIA_PATH: "competencia_01.csv"
+
+DICCIONARIO_DATOS: "/home/tomas/Desktop/maestria/dm-eyf/repo_propio/dmeyf2025/competencia-02/diccionario_datos.csv"
 
 competencia02:
-    DATA_PATH: "/home/tomas/Desktop/maestria/dm-eyf/repo-propio/data/competencia_01_crudo.csv"
+    DATASET_FE_PATH: "competencia_01_fe.csv"
     TABLE_NAME: "competencia_01_fe"
     SEMILLA: [50,100,150,400,700,1000,1500,2000,3000]
     MES_TRAIN: [202101, 202102, 202103]

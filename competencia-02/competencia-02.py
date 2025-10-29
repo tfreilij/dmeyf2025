@@ -1,19 +1,14 @@
 # src/optimization.py (actualizar)
 import optuna
 import lightgbm as lgb
-import pandas as pd
+import polars as pl
 import numpy as np
 import logging
 import yaml
-import json
 import os
-from datetime import datetime
-from .config import *
-from .gain_function import calcular_ganancia, ganancia_lgb_binary, ganancia_evaluator
-from .loader import convertir_clase_ternaria_a_target
+
 
 logger = logging.getLogger(__name__)
-
 
 def load_config(config_path: str) -> dict:
     try:
@@ -25,7 +20,42 @@ def load_config(config_path: str) -> dict:
         logger.error(f"❌ Error loading config from {config_path}: {e}")
         return {}
 
-def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling: float = 1, semillas: list = None) -> float:
+config_path = "config-dev.yml"
+config = load_config(config_path)
+MES_TRAIN = config["MES_TRAIN"]
+MES_VALIDACION = config["MES_VALIDACION"]
+BUCKET = config["BUCKET"]
+STUDY_NAME = config["STUDY_NAME"]
+DATASET_FE_PATH = config["DATASET_FE_PATH"]
+GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
+COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
+
+
+df = pl.read_csv(dataset_path + dataset_file)
+
+df = df.with_columns(
+    pl.lit(1.0).alias('clase_peso')
+).with_columns(
+    pl.when(pl.col('clase_ternaria') == 'BAJA+2')
+    .then(pl.lit(1.00002))
+    .otherwise(pl.col('clase_peso'))
+    .alias('clase_peso')
+).with_columns(
+    pl.when(pl.col('clase_ternaria') == 'BAJA+1')
+    .then(pl.lit(1.00001))
+    .otherwise(pl.col('clase_peso'))
+    .alias('clase_peso')
+)
+
+def lgb_gan_eval(y_pred, data):
+    weight = data.get_weight()
+    ganancia = np.where(weight == 1.00002, GANANCIA_ACIERTO, 0) - np.where(weight < 1.00002, COSTO_ESTIMULO, 0)
+    ganancia = ganancia[np.argsort(y_pred)[::-1]]
+    ganancia = np.cumsum(ganancia)
+
+    return 'gan_eval', np.max(ganancia) , True
+
+def objective(trial: optuna.trial.Trial, df: pl.DataFrame, undersampling: float = 1, semillas: list = None) -> float:
     """
     Parameters:
     trial: trial de optuna
@@ -76,6 +106,8 @@ def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling
         'num_iterations': num_iterations
         }
   
+
+    
     if isinstance(MES_TRAIN, list):
         df_train = df[df['foto_mes'].isin(MES_TRAIN)]
     else:
@@ -95,9 +127,9 @@ def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling
 
     model = lgb.train(
         params,
-        train_data,
-        valid_sets=[val_data],
-        feval=ganancia_evaluator,  # Función de ganancia personalizada
+        df_train,
+        #valid_sets=[val_data],
+        feval=lgb_gan_eval,  # Función de ganancia personalizada
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
     )
   
@@ -115,7 +147,7 @@ def objetivo_ganancia(trial: optuna.trial.Trial, df: pd.DataFrame, undersampling
     return ganancia_total
 
 
-def crear_o_cargar_estudio(study_name: str = None, semilla: int = None) -> optuna.Study:
+def crear_o_cargar_estudio(study_name: str = None, semilla = None) -> optuna.Study:
     """
     Crea un nuevo estudio de Optuna o carga uno existente desde SQLite.
   
@@ -126,16 +158,16 @@ def crear_o_cargar_estudio(study_name: str = None, semilla: int = None) -> optun
     Returns:
         optuna.Study: Estudio de Optuna (nuevo o cargado)
     """
-    study_name = STUDY_NAME
-  
+ 
     if semilla is None:
-        semilla = SEMILLA[0] if isinstance(SEMILLA, list) else SEMILLA
+        semilla = semilla[0] if isinstance(semilla, list) else semilla
   
-    # Crear carpeta para bases de datos si no existe
-    path_db = os.path.join(BUCKET_NAME, "optuna_db")
+    config_path = "config-dev.yml"
+    config = load_config(config_path)
+
+    path_db = os.path.join(BUCKET, "optuna_db")
     os.makedirs(path_db, exist_ok=True)
   
-    # Ruta completa de la base de datos
     db_file = os.path.join(path_db, f"{study_name}.db")
     storage = f"sqlite:///{db_file}"
   
@@ -176,7 +208,7 @@ def crear_o_cargar_estudio(study_name: str = None, semilla: int = None) -> optun
 
 
 
-def optimizar(df: pd.DataFrame, n_trials: int, study_name: str = None, undersampling: float = 0.01) -> optuna.Study:
+def optimizar(df: pl.DataFrame, n_trials: int, mes_train : list, mes_validacion : list , semilla : int, study_name: str = None, undersampling: float = 0.01) -> optuna.Study:
     """
     Args:
         df: DataFrame con datos
@@ -196,15 +228,11 @@ def optimizar(df: pd.DataFrame, n_trials: int, study_name: str = None, undersamp
         optuna.Study: Estudio de Optuna con resultados
     """
 
-    study_name = STUDY_NAME
-
     logger.info(f"Iniciando optimización con {n_trials} trials")
-    logger.info(f"Configuración: TRAIN={MES_TRAIN}, VALID={MES_VALIDACION}, SEMILLA={SEMILLA}")
+    logger.info(f"Configuración: TRAIN={mes_train}, VALID={mes_validacion}, SEMILLA={semilla}")
   
-    # Crear o cargar estudio desde DuckDB
-    study = crear_o_cargar_estudio(study_name, SEMILLA)
+    study = crear_o_cargar_estudio(study_name, semilla)
 
-    # Calcular cuántos trials faltan
     trials_previos = len(study.trials)
     trials_a_ejecutar = max(0, n_trials - trials_previos)
   
@@ -214,9 +242,7 @@ def optimizar(df: pd.DataFrame, n_trials: int, study_name: str = None, undersamp
     else:
         logger.info(f"🆕 Nueva optimización: {n_trials} trials")
   
-    # Ejecutar optimización
     if trials_a_ejecutar > 0:
-        ##LO UNICO IMPORTANTE DEL METODO Y EL study CLARO
         study.optimize(lambda trial: objetivo_ganancia(trial, df, undersampling), n_trials=trials_a_ejecutar)
         logger.info(f"🏆 Mejor ganancia: {study.best_value:,.0f}")
         logger.info(f"Mejores parámetros: {study.best_params}")
@@ -262,27 +288,6 @@ def convertir_clase_ternaria_a_target(df: pd.DataFrame, baja_2_1=True) -> pd.Dat
 
     return df
 
-import pandas as pd
-import os
-import datetime
-import logging
-
-
-from src.config import *
-from src.loader import cargar_datos, convertir_clase_ternaria_a_target
-from src.features import feature_engineering_lag, feature_engineering_delta_lag
-from src.optimization import optimizar
-
-from src.best_params import cargar_mejores_hiperparametros
-
-from src.test_evaluation import evaluar_en_test, guardar_resultados_test
-from src.final_training import preparar_datos_entrenamiento_final, generar_predicciones_finales, entrenar_modelo_final
-from src.output_manager import guardar_predicciones_finales
-
-# Import DuckDB feature engineering
-from competencia_02_fe import DuckDBFeatureEngineering
-
-
 ## config basico logging
 os.makedirs(f"{BUCKET_NAME}/logs", exist_ok=True)
 
@@ -303,105 +308,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def duckdb_feature_engineering(data_path: str, output_path: str = None) -> str:
-    """
-    Perform feature engineering using DuckDB SQL
-    
-    Args:
-        data_path: Path to input CSV file
-        output_path: Path for output CSV file (optional)
-        
-    Returns:
-        str: Path to the processed CSV file
-    """
-    if output_path is None:
-        output_path = os.path.join(BUCKET_NAME, "data", f"df_fe_duckdb_{STUDY_NAME}.csv")
-    
-    logger.info("🔧 Starting DuckDB feature engineering...")
-    
-    with DuckDBFeatureEngineering() as fe:
-        # Load CSV data
-        fe.load_csv(data_path, "competencia_01_fe")
-        
-        # Define feature engineering SQL
-        feature_engineering_sql = """
-        SELECT 
-            *,
-            -- Lag features for key variables
-            LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag1,
-            LAG(cpayroll_trx, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag2,
-            LAG(cpayroll_trx, 3) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_lag3,
-            
-            LAG(ctrx_quarter, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag1,
-            LAG(ctrx_quarter, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag2,
-            LAG(ctrx_quarter, 3) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_lag3,
-            
-            -- Delta features
-            cpayroll_trx - LAG(cpayroll_trx, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_delta1,
-            cpayroll_trx - LAG(cpayroll_trx, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as cpayroll_trx_delta2,
-            
-            ctrx_quarter - LAG(ctrx_quarter, 1) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_delta1,
-            ctrx_quarter - LAG(ctrx_quarter, 2) OVER (PARTITION BY numero_de_cliente ORDER BY foto_mes) as ctrx_quarter_delta2,
-            
-            -- Rolling statistics
-            AVG(cpayroll_trx) OVER (
-                PARTITION BY numero_de_cliente 
-                ORDER BY foto_mes 
-                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-            ) as cpayroll_trx_avg3m,
-            
-            STDDEV(cpayroll_trx) OVER (
-                PARTITION BY numero_de_cliente 
-                ORDER BY foto_mes 
-                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-            ) as cpayroll_trx_std3m,
-            
-            AVG(ctrx_quarter) OVER (
-                PARTITION BY numero_de_cliente 
-                ORDER BY foto_mes 
-                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-            ) as ctrx_quarter_avg3m,
-            
-            STDDEV(ctrx_quarter) OVER (
-                PARTITION BY numero_de_cliente 
-                ORDER BY foto_mes 
-                ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-            ) as ctrx_quarter_std3m,
-            
-            -- Ratio features
-            CASE 
-                WHEN ctrx_quarter > 0 THEN cpayroll_trx / ctrx_quarter 
-                ELSE 0 
-            END as payroll_to_trx_ratio,
-            
-            -- Time-based features
-            EXTRACT(MONTH FROM foto_mes) as mes,
-            EXTRACT(QUARTER FROM foto_mes) as quarter,
-            
-            -- Binary features
-            CASE WHEN cpayroll_trx > 0 THEN 1 ELSE 0 END as has_payroll,
-            CASE WHEN ctrx_quarter > 0 THEN 1 ELSE 0 END as has_transactions,
-            
-            -- Interaction features
-            cpayroll_trx * ctrx_quarter as payroll_trx_interaction
-        FROM competencia_01_fe
-        """
-        
-        # Execute feature engineering
-        fe.execute_sql(feature_engineering_sql, "competencia_01_fe")
-        
-        # Get table info
-        info = fe.get_table_info("competencia_01_fe")
-        logger.info(f"✅ Feature engineering completed: {info['row_count']} rows, {info['column_count']} columns")
-        
-        # Export to CSV
-        fe.export_to_csv("competencia_01_fe", output_path)
-        
-        logger.info(f"💾 Exported engineered features to: {output_path}")
-        
-        return output_path
-
-
 ## Funcion principal
 def main():
     logger.info("Inicio de ejecucion.")
@@ -409,44 +315,13 @@ def main():
     config_path = "config-dev.yml"
     config = load_config(config_path)
 
-    BUCKET_NAME = config["BUCKET_NAME"]
-    DATA_PATH = config["DATA_PATH"]
-    STUDY_NAME = config["STUDY_NAME"]
     
-    os.makedirs(f"{BUCKET_NAME}/data", exist_ok=True)
-    data_path = os.path.join(BUCKET_NAME, data_path)
-    print(data_path)
-    df = cargar_datos(data_path)   
-
-    duckdb_fe_path = os.path.join(BUCKET_NAME, "data", f"df_fe_duckdb_{STUDY_NAME}.csv")
+    data_fe_path = os.path.join(BUCKET,  DATASET_FE_PATH)
     
-    if os.path.exists(duckdb_fe_path):
-        logger.info("✅ DuckDB df_fe.csv encontrado")
-        df_fe = pd.read_csv(duckdb_fe_path)
-    else:
-        logger.info("❌ DuckDB df_fe.csv no encontrado - creando con SQL")
-        
-        # First save the raw data as CSV for DuckDB
-        raw_data_path = os.path.join(BUCKET_NAME, "data", f"raw_data_{STUDY_NAME}.csv")
-        df.to_csv(raw_data_path, index=False)
-        logger.info(f"💾 Raw data saved to: {raw_data_path}")
-        
-        # Use DuckDB for feature engineering
-        df_fe_path = duckdb_feature_engineering(raw_data_path, duckdb_fe_path)
-        
-        # Load the engineered features
-        df_fe = pd.read_csv(df_fe_path)
-        logger.info(f"✅ DuckDB Feature Engineering completado: {df_fe.shape}")
-        
-        # Clean up raw data file
-        if os.path.exists(raw_data_path):
-            os.remove(raw_data_path)
+    data_fe = pl.read_csv(data_fe_path)
 
-
-    #03 Ejecutar optimizacion de hiperparametros
-    study = optimizar(df_fe, n_trials=100, undersampling=0.02)
+    study = optimizar(data_fe, n_trials=100, undersampling=0.02)
   
-    #04 Análisis adicional
     logger.info("=== ANÁLISIS DE RESULTADOS ===")
     trials_df = study.trials_dataframe()
     if len(trials_df) > 0:
