@@ -1,29 +1,39 @@
 #!/usr/bin/env python3
-import duckdb
 import polars as pl
 import logging
-import yaml
+import os
+from load_config import Config
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-col_drops = {
-          "numero_de_cliente", "foto_mes", "active_quarter", "clase_ternaria",
-          "cliente_edad", "cliente_antiguedad",
-          "Visa_fultimo_cierre", "Master_fultimo_cierre",
-          "Visa_Fvencimiento", "Master_Fvencimiento"
-      }
+config = Config("config-dev.yml")
+
+def get_pesos_columns():
+    df = pl.read_csv(config.__getitem__("DICCIONARIO_DATOS"))
+    col_pesos = df.filter(pl.col("unidad") == "pesos").select(pl.col("campo"))
+    logger.info(col_pesos["campo"].to_list())
+    return col_pesos["campo"].to_list()
+
+def generate_deltas(df : pl.DataFrame):
+
+    query_deltas_pl = []
+    for c in get_pesos_columns():
+        if c in ["mtarjeta_visa_debitos_automaticos"]:
+            continue
+        delta_1 = pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")
+        delta_2 = pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")
+        sum_delta_2 = (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")) + (pl.col(c).shift(1).over("numero_de_cliente") - pl.col(c).shift(2).over("numero_de_cliente"))
+
+        query_deltas_pl.append(delta_1.alias(f"delta_1_{c}"))
+        query_deltas_pl.append(delta_2.alias(f"delta_2_{c}"))
+        query_deltas_pl.append(sum_delta_2.alias(f"sum_delta_{c}"))
+
+    df = df.with_columns(query_deltas_pl)
+
+    return df
 
 
-def load_config(config_path: str) -> dict:
-    try:
-        with open(config_path, 'r', encoding='utf-8') as file:
-            config = yaml.safe_load(file)
-            logger.info(f"✅ Loaded configuration from {config_path}")
-            return config
-    except Exception as e:
-        logger.error(f"❌ Error loading config from {config_path}: {e}")
-        return {}
 
 def generate_feature_engineering_sql(diccionario_datos, table_name) -> str:
     """Generate the complete feature engineering SQL query dynamically"""
@@ -61,88 +71,21 @@ def generate_feature_engineering_sql(diccionario_datos, table_name) -> str:
         'Visa_madelantopesos', 'Visa_madelantodolares', 'Visa_fultimo_cierre', 'Visa_mpagado',
         'Visa_mpagospesos', 'Visa_mpagosdolares', 'Visa_mconsumototal', 'Visa_cconsumos'
     ]
+        
     
-    # Generate delta features for each column
-    delta_features = []
-    sum_delta_features = []
-    
-    col_pesos = diccionario_datos.filter(pl.col("unidad") == "pesos").select(pl.col("campo"))
-    query_deltas = ""
-    for c in col_pesos["campo"].to_list():
-        if c in ["mtarjeta_visa_debitos_automaticos"]:
-            continue
-        delta_1 = f"t1.{c} - lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_1_{c} , \n"
-        delta_2 = f"t1.{c} - lag(t1.{c}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes) as delta_2_{c} , \n"
-        sum_delta_2 = f"(t1.{c} - lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes)) + (lag(t1.{c}, 1) over (partition by t1.numero_de_cliente order by t1.foto_mes) - lag(t1.{c}, 2) over (partition by t1.numero_de_cliente order by t1.foto_mes)) as sum_delta_{c},"
-
-        query_deltas = query_deltas + delta_1 + delta_2 + sum_delta_2
-
-    
-    # Build the complete SQL query
-    sql_query = f"""
-    CREATE OR REPLACE TABLE {table_name} AS
-    SELECT
-        t1.*,
-        {query_deltas}
-    FROM {table_name} t1
-    ORDER BY t1.numero_de_cliente, t1.foto_mes;
-    """
-    
-    return sql_query
 
 def run_feature_engineering():
     """Run feature engineering with DuckDB using config file"""
-    
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    
-    config_path = "config-dev.yml"
-    config = load_config(config_path)
-    
+      
     if not config:
         logger.error("Failed to load configuration")
         return
-    
-    dataset_path = config.get("DATASET_TERNARIA_PATH")
-    if not dataset_path:
-        logger.error("No DATA_PATH found in config")
-        return
-    
-    logger.info(f"Dataset path: {dataset_path}")
-    
-    conn = duckdb.connect()
-    table_name = config.get("TABLE_NAME")
-    try:
-        logger.info("Loading dataset...")
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_csv_auto('{dataset_path}')
-        """)
+        
+    df = pl.read_csv(os.path.join(config.__getitem__("DATASETS_PATH"),config.__getitem__("DATASET_TERNARIA_FILE")))
 
-        result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
-        logger.info(f"✅ Loaded {result[0]} rows")
-        
-        logger.info("Executing feature engineering...")
-        
-        diccionario_datos = config.get("DICCIONARIO_DATOS")
-        diccionario_datos = pl.read_csv(diccionario_datos)
-
-        feature_sql = generate_feature_engineering_sql(diccionario_datos,table_name)
-        
-        logger.info("Execute Query " + feature_sql)
-        conn.execute(feature_sql)
-        
-        output_path = config["DATASET_FE_PATH"]
-        conn.execute(f"COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)")
-        logger.info(f"✅ Exported results to {output_path}")
-        
-        result = conn.execute(f"SELECT COUNT(*) as row_count FROM {table_name}").fetchone()
-        logger.info(f"✅ Final dataset: {result[0]} rows")
-        
-    except Exception as e:
-        logger.error(f"❌ Error during feature engineering: {e}")
-    finally:
-        conn.close()
+    df = generate_deltas(df)
+    
+    df.write_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE")))
 
 if __name__ == "__main__":
     run_feature_engineering()
