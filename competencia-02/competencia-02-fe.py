@@ -7,7 +7,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-config = Config("config-dev.yml")
+config = Config()
 
 def get_pesos_columns():
     df = pl.read_csv(config.__getitem__("DICCIONARIO_DATOS"))

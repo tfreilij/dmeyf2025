@@ -89,7 +89,7 @@ def lgb_gan_eval(y_pred, data):
     return 'gan_eval', np.max(ganancia) , True
 
 
-config = Config("config-dev.yml")
+config = Config()
 MES_TRAIN = config["MES_TRAIN"]
 MES_VALIDACION = config["MES_VALIDACION"]
 BUCKET = config["BUCKET"]

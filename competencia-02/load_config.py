@@ -1,9 +1,12 @@
 import yaml
+from dotenv import load_dotenv
+import os
 from pathlib import Path
 
 class Config():
-    def __init__(self, filepath: str):
-        self.filepath = Path(filepath)
+    def __init__(self):
+        load_dotenv()
+        self.filepath = Path(os.getenv("config"))
         self.data = self._load_yaml()
 
     def _load_yaml(self):

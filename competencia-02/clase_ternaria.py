@@ -5,7 +5,7 @@ import yaml
 from load_config import Config
 
 
-config = Config("config-dev.yml")
+config = Config()
 BUCKET = config["BUCKET"]
 DATASET_CRUDO_FILE = config["DATASET_CRUDO_FILE"]
 DATASET_TERNARIA_FILE = config["DATASET_TERNARIA_FILE"]
