@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 
 config = Config()
 
+col_drops = {
+          "numero_de_cliente", "foto_mes", "active_quarter", "clase_ternaria",
+          "cliente_edad", "cliente_antiguedad",
+          "Visa_fultimo_cierre", "Master_fultimo_cierre",
+          "Visa_Fvencimiento", "Master_Fvencimiento", "Master_Finiciomora",
+          "cliente_vip", "internet", "cliente_edad", "cliente_antiguedad", "mrentabilidad_annual", "clase_ternaria"
+      }
+
 def get_pesos_columns():
     df = pl.read_csv(config.__getitem__("DICCIONARIO_DATOS"))
     col_pesos = df.filter(pl.col("unidad") == "pesos").select(pl.col("campo"))
@@ -17,17 +25,32 @@ def get_pesos_columns():
 
 def generate_deltas(df : pl.DataFrame):
 
+    all_cols = df.columns
+    for c in col_drops:
+        all_cols.remove(c)
     query_deltas_pl = []
-    for c in get_pesos_columns():
-        if c in ["mtarjeta_visa_debitos_automaticos"]:
-            continue
-        delta_1 = pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")
-        delta_2 = pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")
-        sum_delta_2 = (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")) + (pl.col(c).shift(1).over("numero_de_cliente") - pl.col(c).shift(2).over("numero_de_cliente"))
+    delta_cols = [f"delta_1_{c}" for c in all_cols ] + \
+             [f"delta_2_{c}" for c in all_cols ] + \
+             [f"sum_delta_{c}" for c in all_cols ]
 
-        query_deltas_pl.append(delta_1.alias(f"delta_1_{c}"))
-        query_deltas_pl.append(delta_2.alias(f"delta_2_{c}"))
-        query_deltas_pl.append(sum_delta_2.alias(f"sum_delta_{c}"))
+    df = df.with_columns([pl.lit(0).cast(pl.Float64).alias(col) for col in delta_cols])
+
+    for c in all_cols:
+        df = df.with_columns(df[c].alias(f"delta_1_{c}"))
+        df = df.with_columns(df[c].alias(f"delta_2_{c}"))
+        df = df.with_columns(df[c].alias(f"sum_delta_{c}"))
+
+
+    query_deltas_pl = []
+    #for c in col_pesos["campo"].to_list():
+    for c in delta_cols:
+        delta_1 = (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
+        delta_2 = (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
+        sum_delta_2 = ((pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")) + (pl.col(c).shift(-1).over("numero_de_cliente") - pl.col(c).shift(-2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
+
+        query_deltas_pl.append(delta_1)
+        query_deltas_pl.append(delta_2)
+        query_deltas_pl.append(sum_delta_2)
 
     df = df.with_columns(query_deltas_pl)
 

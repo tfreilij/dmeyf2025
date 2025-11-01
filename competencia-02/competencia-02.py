@@ -272,8 +272,7 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
       new_params = {'num_leaves': 54, 'learning_rate': 0.166278661717272, 'max_depth': 42, 'min_data_in_leaf': 310, 'feature_fraction': 0.45780488981801093, 'bagging_fraction': 0.2029691560601475, 'min_child_samples': 62, 'max_bin': 416, 'num_iterations': 343}
 
     params.update(new_params)
-    model = lgb.train(params,
-                  train_data)
+    model = lgb.train(params,train_data)
 
     modelos[seed] = model
     if is_test:

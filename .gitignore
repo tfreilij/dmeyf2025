@@ -2,7 +2,7 @@
 *.csv
 *.csv.gz
 
-competencia-02/config.yml
+competencia-02/.env
 competencia-02/competencia-02-venv
 
 # Windows image file caches
