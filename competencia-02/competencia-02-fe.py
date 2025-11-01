@@ -104,7 +104,7 @@ def run_feature_engineering():
         logger.error("Failed to load configuration")
         return
         
-    df = pl.read_csv(os.path.join(config.__getitem__("DATASETS_PATH"),config.__getitem__("DATASET_TERNARIA_FILE")))
+    df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
 
     df = generate_deltas(df)
     
