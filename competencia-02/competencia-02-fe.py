@@ -36,6 +36,7 @@ def generate_deltas(df : pl.DataFrame):
     df = df.with_columns([pl.lit(0).cast(pl.Float64).alias(col) for col in delta_cols])
 
     for c in all_cols:
+        logger.info(f"Generating initial deltas for column: {c}")
         df = df.with_columns(df[c].alias(f"delta_1_{c}"))
         df = df.with_columns(df[c].alias(f"delta_2_{c}"))
         df = df.with_columns(df[c].alias(f"sum_delta_{c}"))
@@ -44,6 +45,7 @@ def generate_deltas(df : pl.DataFrame):
     query_deltas_pl = []
     #for c in col_pesos["campo"].to_list():
     for c in delta_cols:
+        logger.info(f"Generating final deltas for column: {c}")
         delta_1 = (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
         delta_2 = (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
         sum_delta_2 = ((pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")) + (pl.col(c).shift(-1).over("numero_de_cliente") - pl.col(c).shift(-2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
@@ -103,12 +105,14 @@ def run_feature_engineering():
     if not config:
         logger.error("Failed to load configuration")
         return
-        
-    df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
-
-    df = generate_deltas(df)
     
+    logger.info(f"Reading dataset from {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE"))}")
+    df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
+    logger.info("Generating deltas")
+    df = generate_deltas(df)
+    logger.info("Writing dataset")
     df.write_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE")))
+    logger.info(f"Dataset written to {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE"))}")
 
 if __name__ == "__main__":
     run_feature_engineering()
