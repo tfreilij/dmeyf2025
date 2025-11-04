@@ -9,43 +9,45 @@ logger = logging.getLogger(__name__)
 
 config = Config()
 
-col_drops = {
+def filter_foto_mes_range(df : pl.DataFrame, start_mes : int, end_mes : int):
+    df = df.filter(~( (pl.col("foto_mes") >= start_mes) & (pl.col("foto_mes") <= end_mes)))
+    return df
+
+
+def deltas_columns(df : pl.DataFrame):
+
+
+    col_drops = {
           "numero_de_cliente", "foto_mes", "active_quarter", "clase_ternaria",
           "cliente_edad", "cliente_antiguedad",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
           "Visa_Fvencimiento", "Master_Fvencimiento", "Master_Finiciomora",
-          "cliente_vip", "internet", "cliente_edad", "cliente_antiguedad", "mrentabilidad_annual", "clase_ternaria"
+          "cliente_vip", "internet", "cliente_edad", "cliente_antiguedad", "mrentabilidad_annual", "clase_ternaria", 
       }
-
-def get_pesos_columns():
-    df = pl.read_csv(config.__getitem__("DICCIONARIO_DATOS"))
-    col_pesos = df.filter(pl.col("unidad") == "pesos").select(pl.col("campo"))
-    logger.info(col_pesos["campo"].to_list())
-    return col_pesos["campo"].to_list()
-
-def generate_deltas(df : pl.DataFrame):
-
     all_cols = df.columns
     for c in col_drops:
         all_cols.remove(c)
-    query_deltas_pl = []
+    return all_cols
+
+
+
+def generate_deltas(df : pl.DataFrame):
+
+    all_cols = deltas_columns(df)
+
+    for c in all_cols:
+        df = df.with_columns(pl.col(c).alias(f"delta_1_{c}").cast(pl.Float64))
+        df = df.with_columns(pl.col(c).alias(f"delta_2_{c}").cast(pl.Float64))
+        df = df.with_columns(pl.col(c).alias(f"sum_delta_{c}").cast(pl.Float64))
+
+
     delta_cols = [f"delta_1_{c}" for c in all_cols ] + \
              [f"delta_2_{c}" for c in all_cols ] + \
              [f"sum_delta_{c}" for c in all_cols ]
-
-    df = df.with_columns([pl.lit(0).cast(pl.Float64).alias(col) for col in delta_cols])
-
-    for c in all_cols:
-        logger.info(f"Generating initial deltas for column: {c}")
-        df = df.with_columns(df[c].alias(f"delta_1_{c}"))
-        df = df.with_columns(df[c].alias(f"delta_2_{c}"))
-        df = df.with_columns(df[c].alias(f"sum_delta_{c}"))
-
-
     query_deltas_pl = []
     #for c in col_pesos["campo"].to_list():
     for c in delta_cols:
-        logger.info(f"Generating final deltas for column: {c}")
+        print(f"Deltas for column {c}")
         delta_1 = (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
         delta_2 = (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
         sum_delta_2 = ((pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")) + (pl.col(c).shift(-1).over("numero_de_cliente") - pl.col(c).shift(-2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
@@ -57,48 +59,7 @@ def generate_deltas(df : pl.DataFrame):
     df = df.with_columns(query_deltas_pl)
 
     return df
-
-
-
-def generate_feature_engineering_sql(diccionario_datos, table_name) -> str:
-    """Generate the complete feature engineering SQL query dynamically"""
-    logger.info("Generate Feature Engineering SQL")
-    # List of columns to create delta features for
-    columns = [
-        'active_quarter', 'mrentabilidad', 'mrentabilidad_annual', 'mcomisiones', 'mactivos_margen',
-        'mpasivos_margen', 'cproductos', 'ccuenta_corriente', 'mcuenta_corriente_adicional',
-        'mcuenta_corriente', 'ccaja_ahorro', 'mcaja_ahorro', 'mcaja_ahorro_adicional',
-        'mcaja_ahorro_dolares', 'cdescubierto_preacordado', 'mcuentas_saldo', 'ctarjeta_debito',
-        'ctarjeta_debito_transacciones', 'mautoservicio', 'ctarjeta_visa', 'ctarjeta_visa_transacciones',
-        'mtarjeta_visa_consumo', 'ctarjeta_master', 'ctarjeta_master_transacciones', 'mtarjeta_master_consumo',
-        'cprestamos_personales', 'mprestamos_personales', 'cprestamos_prendarios', 'mprestamos_prendarios',
-        'mprestamos_hipotecarios', 'cplazo_fijo', 'mplazo_fijo_dolares', 'mplazo_fijo_pesos',
-        'cinversion1', 'minversion1_pesos', 'minversion1_dolares', 'cinversion2', 'minversion2',
-        'ccaja_seguridad', 'cpayroll_trx', 'mpayroll', 'mpayroll2', 'cpayroll2_trx',
-        'ccuenta_debitos_automaticos', 'mcuenta_debitos_automaticos', 'ctarjeta_visa_debitos_automaticos',
-        'mttarjeta_visa_debitos_automaticos', 'ctarjeta_master_debitos_automaticos', 'mttarjeta_master_debitos_automaticos',
-        'cpagodeservicios', 'mpagodeservicios', 'cpagomiscuentas', 'mpagomiscuentas',
-        'ccajeros_propios_descuentos', 'mcajeros_propios_descuentos', 'ctarjeta_visa_descuentos',
-        'mtarjeta_visa_descuentos', 'ctarjeta_master_descuentos', 'mtarjeta_master_descuentos',
-        'ccomisiones_mantenimiento', 'mcomisiones_mantenimiento', 'ccomisiones_otras', 'mcomisiones_otras',
-        'cforex', 'cforex_buy', 'mforex_buy', 'cforex_sell', 'mforex_sell',
-        'ctransferencias_recibidas', 'mtransferencias_recibidas', 'ctransferencias_emitidas', 'mtransferencias_emitidas',
-        'cextraccion_autoservicio', 'mextraccion_autoservicio', 'tcallcenter', 'ccallcenter_transacciones',
-        'chomebanking_transacciones', 'ccajas_consultas', 'ccajas_extracciones', 'ccajas_otras',
-        'catm_trx', 'matm', 'ctrx_quarter', 'cmobile_app_trx',
-        'Master_delinquency', 'Master_mfinanciacion_limite', 'Master_Fvencimiento', 'Master_Finiciomora',
-        'Master_msaldototal', 'Master_msaldopesos', 'Master_msaldodolares', 'Master_mconsumospesos',
-        'Master_mconsumosdolares', 'Master_mlimitecompra', 'Master_madelantopesos', 'Master_madelantodolares',
-        'Master_fultimo_cierre', 'Master_mpagado', 'Master_mpagospesos', 'Master_mpagosdolares',
-        'Master_mconsumototal', 'Master_cconsumos', 'Master_cadelantosefectivo', 'Master_mpagominimo',
-        'Visa_delinquency', 'Visa_mfinanciacion_limite', 'Visa_msaldototal', 'Visa_msaldopesos',
-        'Visa_msaldodolares', 'Visa_mconsumospesos', 'Visa_mconsumosdolares', 'Visa_mlimitecompra',
-        'Visa_madelantopesos', 'Visa_madelantodolares', 'Visa_fultimo_cierre', 'Visa_mpagado',
-        'Visa_mpagospesos', 'Visa_mpagosdolares', 'Visa_mconsumototal', 'Visa_cconsumos'
-    ]
-        
-    
-
+       
 def run_feature_engineering():
     """Run feature engineering with DuckDB using config file"""
       
@@ -108,6 +69,10 @@ def run_feature_engineering():
     
     logger.info(f"Reading dataset from {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE"))}")
     df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
+    logger.info("Filtering foto_mes range")
+    logger.info(f"Filtering from {202003} to {202012} : {df.shape} rows")
+    df = filter_foto_mes_range(df, 202003, 202012)
+    logger.info(f"After filtering: {df.shape} rows")
     logger.info("Generating deltas")
     df = generate_deltas(df)
     logger.info("Writing dataset")

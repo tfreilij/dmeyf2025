@@ -28,6 +28,30 @@ def drop_columns(df : pl.DataFrame):
     return df
 
 
+def remove_clients_entered_2021_not_active_after_202108(df: pl.DataFrame) -> pl.DataFrame:
+
+    client_lifespan = (
+        df.groupby("numero_de_cliente")
+          .agg([
+              pl.col("foto_mes").min().alias("first_foto_mes"),
+              pl.col("foto_mes").max().alias("last_foto_mes")
+          ])
+    )
+
+    to_remove = client_lifespan.filter(
+        (pl.col("first_foto_mes") >= 202101) & 
+        (pl.col("first_foto_mes") <= 202112) &
+        (pl.col("last_foto_mes") < 202108)
+    )["numero_de_cliente"]
+
+    # remove them from df
+    df_filtered = df.filter(~pl.col("numero_de_cliente").is_in(to_remove))
+    return df_filtered
+
+def aplicar_undersampling(df: pl.DataFrame, ratio: float, random_state: int = None) -> pl.DataFrame:
+    df = remove_clients_entered_2021_not_active_after_202108(df)
+    return df
+
 def ganancia_evaluator(y_pred, y_true) -> float:
 
     y_true = y_true.get_label()
@@ -120,7 +144,7 @@ clientes_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_clien
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
 df = drop_columns(df)
-
+df = aplicar_undersampling(df)
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
@@ -153,7 +177,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
 
     num_leaves = trial.suggest_int('num_leaves', 8, 80)
     learning_rate = trial.suggest_float('learning_rate', 0.01, 0.4)
-    max_depth = trial.suggest_int("max_depth", -1, 50)
+    max_depth = trial.suggest_int("max_depth", 10, 100)
     min_data_in_leaf = trial.suggest_int('min_data_in_leaf', 1, 1000)
     feature_fraction = trial.suggest_float('feature_fraction', 0.1, 1.0)
     max_bin = trial.suggest_int('max_bin', 255, 500)
@@ -185,13 +209,16 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
                                 label=y_pd,
                                 weight=weight_pd)
 
-    model = lgb.train(
+    for s in SEMILLA:
+      params['seed'] = s
+      model = lgb.train(
         params,
         train_data,
-        #valid_sets=[val_data],
-        feval=lgb_gan_eval,  # Función de ganancia personalizada
+        valid_sets=[df_val],
+        feval=lgb_gan_eval,
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
-    )
+      )
+    
   
     y_pred_proba = model.predict(df_val)
   
@@ -216,8 +243,6 @@ study = optuna.create_study(
 if run_bayesian_optimization:
   study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight, sss_opt), n_trials=50)
 
-def aplicar_undersampling(df: pl.DataFrame, ratio: float, random_state: int = None) -> pl.DataFrame:
-    pass
 
 os.makedirs(f"{BUCKET}/logs", exist_ok=True)
 
