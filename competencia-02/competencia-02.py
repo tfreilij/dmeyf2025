@@ -73,7 +73,7 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
 
 
 
-def aplicar_undersampling(df: pl.DataFrame, ratio: float, random_state: int = None) -> pl.DataFrame:
+def aplicar_undersampling(df: pl.DataFrame) -> pl.DataFrame:
     df = remove_clients_entered_2021_not_active_after_202108(df)
     return df
 
