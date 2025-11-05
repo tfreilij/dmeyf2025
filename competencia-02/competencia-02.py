@@ -31,7 +31,7 @@ def drop_columns(df : pl.DataFrame):
 def remove_clients_entered_2021_not_active_after_202108(df: pl.DataFrame) -> pl.DataFrame:
 
     client_lifespan = (
-        df.groupby("numero_de_cliente")
+        df.group_by("numero_de_cliente")
           .agg([
               pl.col("foto_mes").min().alias("first_foto_mes"),
               pl.col("foto_mes").max().alias("last_foto_mes")
