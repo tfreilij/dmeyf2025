@@ -17,19 +17,30 @@ def filter_foto_mes_range(df : pl.DataFrame, start_mes : int, end_mes : int):
 def deltas_columns(df : pl.DataFrame):
 
 
-    col_drops = {
-          "numero_de_cliente", "foto_mes", "active_quarter", "clase_ternaria",
-          "cliente_edad", "cliente_antiguedad",
-          "Visa_fultimo_cierre", "Master_fultimo_cierre",
+    col_drops = [
+          "numero_de_cliente", "foto_mes", "active_quarter",
+          "cliente_antiguedad", 
           "Visa_Fvencimiento", "Master_Fvencimiento", "Master_Finiciomora",
-          "cliente_vip", "internet", "cliente_edad", "cliente_antiguedad", "mrentabilidad_annual", "clase_ternaria", 
-      }
+          "cliente_vip", "internet", "cliente_edad", "mrentabilidad_annual"
+    ]
+
+    columnas_despreciables = ['ccuenta_corriente', "tcuentas", "mpasivos_margen", 
+    "mcuenta_corriente_adicional", "ccaja_ahorro", "mcaja_ahorro_adicional",
+    "cprestamos_personales","mprestamos_personales", "mprestamos_prendarios","cprestamos_hipotecarios","mprestamos_hipotecarios"
+    ,"cinversion1","minversion1_dolares","cinversion2","minversion2","cseguro_auto","cseguro_vivienda","cseguro_accidentes_personales",
+    "ccaja_seguridad","mpayroll2","cpayroll2_trx","ccuenta_debitos_automaticos",
+    "ctarjeta_visa_debitos_automaticos","ctarjeta_master_debitos_automaticos",
+    "mttarjeta_master_debitos_automaticos","cpagodeservicios","mpagodeservicios","ccajeros_propios_descuentos","mcajeros_propios_descuentos"
+    ,"ctarjeta_visa_descuentos","mtarjeta_visa_descuentos","cforex_buy","mforex_buy","ccheques_depositados","ccheques_emitidos",
+    "ccheques_depositados_rechazados","mcheques_depositados_rechazados","ccheques_emitidos_rechazados","mcheques_emitidos_rechazados","ccajas_transacciones",
+                        "ccajas_consultas","ccajas_depositos","ccajas_otras","Visa_fultimo_cierre","Master_fultimo_cierre","minversion1_pesos"]
+
+    col_drops.extend(columnas_despreciables)
+
     all_cols = df.columns
     for c in col_drops:
         all_cols.remove(c)
     return all_cols
-
-
 
 def generate_deltas(df : pl.DataFrame):
 
@@ -48,9 +59,9 @@ def generate_deltas(df : pl.DataFrame):
     #for c in col_pesos["campo"].to_list():
     for c in delta_cols:
         print(f"Deltas for column {c}")
-        delta_1 = (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
-        delta_2 = (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
-        sum_delta_2 = ((pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")) + (pl.col(c).shift(-1).over("numero_de_cliente") - pl.col(c).shift(-2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
+        delta_1 = (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
+        delta_2 = (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
+        sum_delta_2 = ((pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")) + (pl.col(c).shift(1).over("numero_de_cliente") - pl.col(c).shift(2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
 
         query_deltas_pl.append(delta_1)
         query_deltas_pl.append(delta_2)
@@ -69,9 +80,7 @@ def run_feature_engineering():
     
     logger.info(f"Reading dataset from {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE"))}")
     df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
-    logger.info("Filtering foto_mes range")
-    logger.info(f"Filtering from {202003} to {202012} : {df.shape} rows")
-    df = filter_foto_mes_range(df, 202003, 202012)
+    df = df.sort(by=["numero_de_cliente", "foto_mes"])
     logger.info(f"After filtering: {df.shape} rows")
     logger.info("Generating deltas")
     df = generate_deltas(df)
