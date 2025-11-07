@@ -15,7 +15,7 @@ from load_config import Config
 logger = logging.getLogger(__name__)
 
 def drop_columns(df : pl.DataFrame):
-
+    logger.info("Dropping columns")
 
     col_drops = [
           "numero_de_cliente", "active_quarter", "clase_ternaria",
@@ -29,7 +29,7 @@ def drop_columns(df : pl.DataFrame):
 
 
 def remove_clients_entered_2021_not_active_after_202108(df: pl.DataFrame) -> pl.DataFrame:
-
+    logger.info("Removing clients entered in 2021 not active after 202108")
     client_lifespan = (
         df.group_by("numero_de_cliente")
           .agg([
@@ -137,7 +137,6 @@ def lgb_gan_eval(y_pred, data):
 
     return 'gan_eval', np.max(ganancia) , True
 
-
 config = Config()
 MES_TRAIN = config["MES_TRAIN"]
 MES_VALIDACION = config["MES_VALIDACION"]
@@ -159,17 +158,41 @@ run_bayesian_optimization = False
 submit = False
 train_test_models = True
 
+os.makedirs(f"{BUCKET}/logs", exist_ok=True)
+
+fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
+
+log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
+        logging.StreamHandler()
+    ]
+)
+
+
+logging.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
 
+logging.info("Generate Clase Peso")
 df = generate_clase_peso(df)
 
+logging.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
 
+logging.info("Split DataFrame")
 clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
 clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
+logging.info("Drop Columns")
 df = drop_columns(df)
+
+logging.info("Apply Undersampling")
 df = aplicar_undersampling(df)
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
@@ -263,25 +286,13 @@ study = optuna.create_study(
     load_if_exists=True,
 )
 
+
 if run_bayesian_optimization:
+  logging.info("Run Optimization")
   study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight), n_trials=50)
 
 
-os.makedirs(f"{BUCKET}/logs", exist_ok=True)
 
-fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
-
-log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
-    handlers=[
-        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
-        logging.StreamHandler()
-    ]
-)
 
 def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test) -> list:
   # Convert Polars DataFrames to Pandas DataFrames
@@ -329,9 +340,9 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
       model.save_model(MODELOS_PATH + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
   return modelos
 
-print(SEMILLA)
 test_models = {}
 for seed in SEMILLA:
+  logging.info(f"Build or Load Test model for seed : {seed}")
   model_file_path = MODELOS_PATH + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
     print(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
@@ -349,6 +360,7 @@ train_predict_models = True
 
 predict_models = {}
 for seed in SEMILLA:
+  logging.info(f"Build or Load Predict model for seed : {seed}")
   model_file_path = MODELOS_PATH + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
     print(f"Cargamos el modelo de Predicción de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
@@ -367,4 +379,7 @@ test_predictions = build_predictions(clientes_test, test_models, df_test, thresh
 kaggle_predictions = build_predictions(clientes_predict, predict_models, df_predict, threshold=THRESHOLD, y_true=None)
 
 if submit:
+  logging.info(f"Build submission csv")
   kaggle_predictions.write_csv(BUCKET + f"predictions_{SUBMISSION_NUMBER}.csv")
+
+logging.info(f"Program Ends")
