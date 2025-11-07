@@ -1,4 +1,4 @@
-STUDY_NAME : "competencia-02-study-1-0"
+STUDY_NAME: "competencia-02-study-1-0"
 
 BUCKET: "/home/tomas_freilij/buckets/"
 
@@ -9,7 +9,7 @@ DATASET_TERNARIA_FILE: "competencia_02.csv"
 DATASET_FE_FILE: "competencia_02_fe.csv"
 DICCIONARIO_DATOS: "/home/tomas_freilij/dmeyf2025/competencia-02/diccionario_datos.csv"
 
-MODELOS_PATH : "modelos/"
+MODELOS_PATH: "modelos/"
 
 DATASET_FE_PATH: "competencia_02_fe.csv"
 TABLE_NAME: "competencia_02_fe"
@@ -21,3 +21,5 @@ FINAL_TRAIN: [202101, 202102, 202103, 202104]
 FINAL_PREDICT: 202106
 GANANCIA_ACIERTO: 780000
 COSTO_ESTIMULO: 20000
+
+UNDERSAMPLING_FRACTION: 0.7

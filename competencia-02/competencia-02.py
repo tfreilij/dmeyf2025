@@ -27,27 +27,6 @@ def drop_columns(df : pl.DataFrame):
     df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares'])
     return df
 
-
-def remove_clients_entered_2021_not_active_after_202108(df: pl.DataFrame) -> pl.DataFrame:
-    logger.info("Removing clients entered in 2021 not active after 202108")
-    client_lifespan = (
-        df.group_by("numero_de_cliente")
-          .agg([
-              pl.col("foto_mes").min().alias("first_foto_mes"),
-              pl.col("foto_mes").max().alias("last_foto_mes")
-          ])
-    )
-
-    to_remove = client_lifespan.filter(
-        (pl.col("first_foto_mes") >= 202101) & 
-        (pl.col("first_foto_mes") <= 202112) &
-        (pl.col("last_foto_mes") < 202108)
-    )["numero_de_cliente"]
-
-    # remove them from df
-    df_filtered = df.filter(~pl.col("numero_de_cliente").is_in(to_remove))
-    return df_filtered
-
 def ganancia_prob(y_pred, y_true, threshold,prop = 1):
   ganancia = np.where(y_true == 1, GANANCIA_ACIERTO, 0) - np.where(y_true == 0, COSTO_ESTIMULO, 0)
   return ganancia[y_pred >= threshold].sum() / prop
@@ -73,9 +52,17 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
 
 
 
-def aplicar_undersampling(df: pl.DataFrame) -> pl.DataFrame:
-    df = remove_clients_entered_2021_not_active_after_202108(df)
-    return df
+def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
+    logger.info("Undersampling Continuas")
+    
+    df_bajas = df.filter(pl.col('clase_ternaria').is_in(["BAJA+1", "BAJA+2"]))
+    df_continuas = df.filter(pl.col('clase_ternaria') == 'CONTINUA')
+
+    df_continuas_undersampled = df_continuas.sample(fraction=fraction, seed=1000)
+
+    df_undersampled = pl.concat([df_bajas, df_continuas_undersampled])
+
+    return df_undersampled
 
 def ganancia_evaluator(y_pred, y_true) -> float:
 
@@ -152,6 +139,7 @@ SEMILLA = config["SEMILLA"]
 MODELOS_PATH = config["MODELOS_PATH"]
 THRESHOLD = config["THRESHOLD"]
 SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
+FRACTION = config["UNDERSAMPLING_FRACTION"]
 
 debug = False
 run_bayesian_optimization = False
@@ -193,7 +181,7 @@ logging.info("Drop Columns")
 df = drop_columns(df)
 
 logging.info("Apply Undersampling")
-df = aplicar_undersampling(df)
+df = aplicar_undersampling(df, FRACTION)
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)

@@ -4,10 +4,25 @@ import logging
 import os
 from load_config import Config
 from pathlib import Path
+import datetime
+
+
 
 logger = logging.getLogger(__name__)
 
+
 config = Config()
+
+BUCKET = config["BUCKET"]
+
+os.makedirs(f"{BUCKET}/logs", exist_ok=True)
+
+fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+nombre_log = f"log_fe_{fecha}.log"
+
+log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
+
+
 
 def filter_foto_mes_range(df : pl.DataFrame, start_mes : int, end_mes : int):
     df = df.filter(~( (pl.col("foto_mes") >= start_mes) & (pl.col("foto_mes") <= end_mes)))
@@ -58,7 +73,7 @@ def generate_deltas(df : pl.DataFrame):
     query_deltas_pl = []
     #for c in col_pesos["campo"].to_list():
     for c in delta_cols:
-        print(f"Deltas for column {c}")
+        logger.info(f"Deltas for column {c}")
         delta_1 = (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
         delta_2 = (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
         sum_delta_2 = ((pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")) + (pl.col(c).shift(1).over("numero_de_cliente") - pl.col(c).shift(2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
