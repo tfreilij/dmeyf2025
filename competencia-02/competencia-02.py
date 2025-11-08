@@ -112,8 +112,6 @@ def generate_clase_binaria(df : pl.DataFrame):
         pl.when(pl.col('clase_ternaria').is_in(['BAJA+2','BAJA+1'])).then(pl.lit(1)).otherwise(pl.lit(0)).alias('clase_binaria')
     )
 
-    df = df.drop(['clase_ternaria'])
-
     return df
 
 def lgb_gan_eval(y_pred, data):
@@ -166,11 +164,16 @@ logging.basicConfig(
 logging.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
 
+logging.info("Apply Undersampling")
+df = aplicar_undersampling(df, FRACTION)
+
 logging.info("Generate Clase Peso")
 df = generate_clase_peso(df)
 
 logging.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
+
+df = df.drop(['clase_ternaria'])
 
 logging.info("Split DataFrame")
 clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
@@ -180,8 +183,6 @@ clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cli
 logging.info("Drop Columns")
 df = drop_columns(df)
 
-logging.info("Apply Undersampling")
-df = aplicar_undersampling(df, FRACTION)
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
