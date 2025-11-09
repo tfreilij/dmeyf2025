@@ -332,15 +332,15 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
 
     modelos[seed] = model
     if is_test:
-      model.save_model(MODELOS_PATH + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt')
+      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt')
     else:
-      model.save_model(MODELOS_PATH + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
+      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
   return modelos
 
 test_models = {}
 for seed in SEMILLA:
   logging.info(f"Build or Load Test model for seed : {seed}")
-  model_file_path = MODELOS_PATH + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt'
+  model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
     print(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
     booster = lgb.Booster(model_file=model_file_path)
@@ -358,7 +358,7 @@ train_predict_models = True
 predict_models = {}
 for seed in SEMILLA:
   logging.info(f"Build or Load Predict model for seed : {seed}")
-  model_file_path = MODELOS_PATH + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt'
+  model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
     print(f"Cargamos el modelo de Predicción de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
     modelo_anterior = lgb.Booster(model_file=model_file_path)
