@@ -58,7 +58,7 @@ def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
     clientes_solo_continuas = df.group_by("numero_de_cliente").agg(n_bajas=pl.col("clase_binaria").sum()).filter(pl.col("n_bajas") == 0)
     clientes_continua = clientes_solo_continuas['numero_de_cliente']
     clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-fraction, seed=1000)
-    df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled))
+    df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled["numero_de_cliente"]))
 
     return df
 
