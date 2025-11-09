@@ -55,14 +55,12 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
 def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
     logger.info("Undersampling Continuas")
     
-    df_bajas = df.filter(pl.col('clase_ternaria').is_in(["BAJA+1", "BAJA+2"]))
-    df_continuas = df.filter(pl.col('clase_ternaria') == 'CONTINUA')
+    clientes_solo_continuas = df.group_by("numero_de_cliente").agg(n_bajas=pl.col("clase_binaria").sum()).filter(pl.col("n_bajas") == 0)
+    clientes_continua = clientes_solo_continuas['numero_de_cliente']
+    clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-fraction, seed=1000)
+    df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled))
 
-    df_continuas_undersampled = df_continuas.sample(fraction=fraction, seed=1000)
-
-    df_undersampled = pl.concat([df_bajas, df_continuas_undersampled])
-
-    return df_undersampled
+    return df
 
 def ganancia_evaluator(y_pred, y_true) -> float:
 
@@ -164,14 +162,14 @@ logging.basicConfig(
 logging.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
 
+logging.info("Generate Clase Binaria")
+df = generate_clase_binaria(df)
+
 logging.info("Apply Undersampling")
 df = aplicar_undersampling(df, FRACTION)
 
 logging.info("Generate Clase Peso")
 df = generate_clase_peso(df)
-
-logging.info("Generate Clase Binaria")
-df = generate_clase_binaria(df)
 
 df = df.drop(['clase_ternaria'])
 
