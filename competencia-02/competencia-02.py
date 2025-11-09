@@ -282,10 +282,20 @@ if run_bayesian_optimization:
 
 
 def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test) -> list:
-  # Convert Polars DataFrames to Pandas DataFrames
+  
+  cols_to_cast = [c for c, dtype in zip(train_dataset.columns, train_dataset.dtypes) if dtype == pl.Utf8]
+
+  # Castear esas columnas a Float64 (de forma segura)
+  train_dataset = train_dataset.with_columns([
+    pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
+  ])
+
   train_dataset_pd = train_dataset.to_pandas()
   y_target_pd = y_target.to_pandas()
   weight_pd = weight.to_pandas()
+
+
+
 
   train_data = lgb.Dataset(train_dataset_pd,
                               label=y_target_pd,
