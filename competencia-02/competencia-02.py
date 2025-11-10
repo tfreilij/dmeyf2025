@@ -199,12 +199,12 @@ debug = False
 submit = True
 train_test_models = config["TRAIN_TEST_MODELS"]
 
-os.makedirs(f"{BUCKET}/logs", exist_ok=True)
+os.makedirs(f"{BUCKET}/log", exist_ok=True)
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
 
-log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
+log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -221,8 +221,8 @@ logger.info(f"Config : {config}")
 logger.info("Read Undersampled DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLE_FILE))
 
-logger.info("Generate Clase Binaria")
-df = generate_clase_binaria(df)
+#logger.info("Generate Clase Binaria")
+#df = generate_clase_binaria(df)
 
 logger.info("Generate Clase Peso")
 df = generate_clase_peso(df)
