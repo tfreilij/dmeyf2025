@@ -274,7 +274,12 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     max_bin = trial.suggest_int('max_bin', 255, 500)
     num_iterations = trial.suggest_int('num_iterations', 100, 500)
 
-    X_pd = X.to_pandas()
+    cols_to_cast = [c for c, dtype in zip(X.columns, X.dtypes) if dtype == pl.Utf8]
+
+    train_dataset = X.with_columns([
+      pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
+    ])
+    X_pd = train_dataset.to_pandas()
     y_pd = y.to_pandas()
     weight_pd = weight.to_pandas()
 
@@ -309,7 +314,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas()
-)
+      )
       modelos[s] = lgb.train(
         params,
         train_data,
