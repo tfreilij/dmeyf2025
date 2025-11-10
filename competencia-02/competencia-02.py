@@ -38,6 +38,7 @@ def binarize_predictions(y_pred):
 
 def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
   predicciones = {}
+
   for seed,model in modelos.items():
     if seed in SEMILLA:
       print(f"Semilla: {seed}")
@@ -120,6 +121,53 @@ def lgb_gan_eval(y_pred, data):
 
     return 'gan_eval', np.max(ganancia) , True
 
+
+def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test) -> list:
+
+  train_dataset_pd = train_dataset.to_pandas()
+  y_target_pd = y_target.to_pandas()
+  weight_pd = weight.to_pandas()
+
+  train_data = lgb.Dataset(train_dataset_pd,
+                              label=y_target_pd,
+                              weight=weight_pd)
+
+  modelos = {}
+  print(f"Construimos los models para las semillas : {semillas}")
+
+  for seed in semillas:
+    print(f"Semilla: {seed}")
+
+    params = {
+            'objective': 'binary',
+              'metric': 'auc',
+              'boosting_type': 'rf',
+              'first_metric_only': True,
+              'boost_from_average': True,
+              'feature_pre_filter': False,
+              'max_bin': 31,
+              'seed': seed,
+              'verbose': -1
+        }
+
+
+    if run_bayesian_optimization:
+      best_iter = study.best_trial.user_attrs["best_iter"]
+      new_params = study.best_trial.params
+      new_params['n_estimators'] = best_iter
+    else:
+      new_params = {'num_leaves': 54, 'learning_rate': 0.166278661717272, 'max_depth': 42, 'min_data_in_leaf': 310, 'feature_fraction': 0.45780488981801093, 'bagging_fraction': 0.2029691560601475, 'min_child_samples': 62, 'max_bin': 416, 'num_iterations': 343}
+
+    params.update(new_params)
+    model = lgb.train(params,train_data)
+
+    modelos[seed] = model
+    if is_test:
+      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt')
+    else:
+      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
+  return modelos
+
 config = Config()
 MES_TRAIN = config["MES_TRAIN"]
 MES_VALIDACION = config["MES_VALIDACION"]
@@ -136,10 +184,10 @@ MODELOS_PATH = config["MODELOS_PATH"]
 THRESHOLD = config["THRESHOLD"]
 SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
 FRACTION = config["UNDERSAMPLING_FRACTION"]
+RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 
 debug = False
-run_bayesian_optimization = False
-submit = False
+submit = True
 train_test_models = True
 
 os.makedirs(f"{BUCKET}/logs", exist_ok=True)
@@ -172,6 +220,13 @@ logging.info("Generate Clase Peso")
 df = generate_clase_peso(df)
 
 df = df.drop(['clase_ternaria'])
+
+cols_to_cast = [c for c, dtype in zip(df.columns, df.dtypes) if dtype == pl.Utf8]
+
+# Castear esas columnas a Float64 (de forma segura)
+train_dataset = df.with_columns([
+  pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
+])
 
 logging.info("Split DataFrame")
 clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
@@ -274,68 +329,9 @@ study = optuna.create_study(
 )
 
 
-if run_bayesian_optimization:
+if RUN_BAYESIAN_OPTIMIZATION:
   logging.info("Run Optimization")
   study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight), n_trials=50)
-
-
-
-
-def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test) -> list:
-  
-  cols_to_cast = [c for c, dtype in zip(train_dataset.columns, train_dataset.dtypes) if dtype == pl.Utf8]
-
-  # Castear esas columnas a Float64 (de forma segura)
-  train_dataset = train_dataset.with_columns([
-    pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
-  ])
-
-  train_dataset_pd = train_dataset.to_pandas()
-  y_target_pd = y_target.to_pandas()
-  weight_pd = weight.to_pandas()
-
-
-
-
-  train_data = lgb.Dataset(train_dataset_pd,
-                              label=y_target_pd,
-                              weight=weight_pd)
-
-  modelos = {}
-  print(f"Construimos los models para las semillas : {semillas}")
-
-  for seed in semillas:
-    print(f"Semilla: {seed}")
-
-    params = {
-            'objective': 'binary',
-              'metric': 'auc',
-              'boosting_type': 'rf',
-              'first_metric_only': True,
-              'boost_from_average': True,
-              'feature_pre_filter': False,
-              'max_bin': 31,
-              'seed': seed,
-              'verbose': -1
-        }
-
-
-    if run_bayesian_optimization:
-      best_iter = study.best_trial.user_attrs["best_iter"]
-      new_params = study.best_trial.params
-      new_params['n_estimators'] = best_iter
-    else:
-      new_params = {'num_leaves': 54, 'learning_rate': 0.166278661717272, 'max_depth': 42, 'min_data_in_leaf': 310, 'feature_fraction': 0.45780488981801093, 'bagging_fraction': 0.2029691560601475, 'min_child_samples': 62, 'max_bin': 416, 'num_iterations': 343}
-
-    params.update(new_params)
-    model = lgb.train(params,train_data)
-
-    modelos[seed] = model
-    if is_test:
-      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt')
-    else:
-      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
-  return modelos
 
 test_models = {}
 for seed in SEMILLA:
