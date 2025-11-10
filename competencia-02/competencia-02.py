@@ -216,19 +216,19 @@ logging.basicConfig(
 )
 
 
-logging.info("Read DataFrame")
+logger.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
 
-logging.info("Generate Clase Binaria")
+logger.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
 
-logging.info("Apply Undersampling")
+logger.info("Apply Undersampling")
 df = aplicar_undersampling(df, FRACTION)
 
-logging.info("Generate Clase Peso")
+logger.info("Generate Clase Peso")
 df = generate_clase_peso(df)
 
-
+logger.info("Cast every column to Float64")
 cols_to_cast = [c for c, dtype in zip(df.columns, df.dtypes) if dtype == pl.Utf8]
 
 # Castear esas columnas a Float64 (de forma segura)
@@ -236,14 +236,20 @@ train_dataset = df.with_columns([
   pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
 ])
 
-logging.info("Split DataFrame")
+logger.info("Split DataFrame")
 clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
 clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
-logging.info("Drop Columns")
+logger.info("Drop Columns")
 df = drop_columns(df)
 
+
+logger.info("Split Dataset")
+logger.info(f"MES_TRAIN : {MES_TRAIN}")
+logger.info(f"MES_TEST : {MES_TEST}")
+logger.info(f"FINAL_PREDICT : {FINAL_PREDICT}")
+logger.info(f"FINAL_PREDICT : {FINAL_TRAIN}")
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
@@ -252,6 +258,7 @@ df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 
+logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
 df_train = df_train.drop(['foto_mes'])
 df_test = df_test.drop(['foto_mes'])
 df_predict = df_predict.drop(['foto_mes'])
@@ -283,14 +290,17 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     num_iterations = trial.suggest_int('num_iterations', 100, 500)
 
     cols_to_cast = [c for c, dtype in zip(X.columns, X.dtypes) if dtype == pl.Utf8]
-
+    
     train_dataset = X.with_columns([
       pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
     ])
+
+    
     X_pd = train_dataset.to_pandas()
     y_pd = y.to_pandas()
     weight_pd = weight.to_pandas()
 
+    logger.info(f"PD Columns : {X_pd.columns}")
     train_data = lgb.Dataset(X_pd,
                                 label=y_pd,
                                 weight=weight_pd.to_numpy())
@@ -318,7 +328,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       df_val_y = df_val["clase_binaria"]
       val_weight = df_val["clase_peso"]
       df_val_X = df_val.drop(["clase_binaria","clase_peso"])
-
+      logger.info(f"DF_VAL Columns : {df_val_X.columns}")
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas(),
@@ -352,20 +362,20 @@ study = optuna.create_study(
 
 
 if RUN_BAYESIAN_OPTIMIZATION:
-  logging.info("Run Optimization")
+  logger.info("Run Optimization")
   study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight), n_trials=50)
 
 test_models = {}
 for seed in SEMILLA:
-  logging.info(f"Build or Load Test model for seed : {seed}")
+  logger.info(f"Build or Load Test model for seed : {seed}")
   model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
-    print(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
+    logger.info(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
     booster = lgb.Booster(model_file=model_file_path)
     test_models[seed] = booster
     train_test_models = False
   else:
-    print(f"El modelo de Test para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
+    logger.info(f"El modelo de Test para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
 
 if train_test_models:
   test_models = build_and_save_models(SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
@@ -375,15 +385,15 @@ train_predict_models = True
 
 predict_models = {}
 for seed in SEMILLA:
-  logging.info(f"Build or Load Predict model for seed : {seed}")
+  logger.info(f"Build or Load Predict model for seed : {seed}")
   model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt'
   if os.path.exists(model_file_path):
-    print(f"Cargamos el modelo de Predicción de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
+    logger.info(f"Cargamos el modelo de Predicción de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
     modelo_anterior = lgb.Booster(model_file=model_file_path)
     predict_models[seed] = modelo_anterior
     train_predict_models = False
   else:
-    print(f"El modelo de Predicción para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
+    logger.info(f"El modelo de Predicción para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
 
 if train_predict_models:
   predict_models = build_and_save_models(SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
@@ -394,7 +404,7 @@ test_predictions = build_predictions(clientes_test, test_models, df_test, thresh
 kaggle_predictions = build_predictions(clientes_predict, predict_models, df_predict, threshold=THRESHOLD, y_true=None)
 
 if submit:
-  logging.info(f"Build submission csv")
+  logger.info(f"Build submission csv")
   kaggle_predictions.write_csv(BUCKET + f"predictions_{SUBMISSION_NUMBER}.csv")
 
-logging.info(f"Program Ends")
+logger.info(f"Program Ends")
