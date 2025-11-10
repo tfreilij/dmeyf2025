@@ -293,7 +293,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
 
     train_data = lgb.Dataset(X_pd,
                                 label=y_pd,
-                                weight=weight_pd)
+                                weight=weight_pd.to_numpy())
 
     modelos = {}
     for s in SEMILLA:
@@ -322,7 +322,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas(),
-          weight=val_weight
+          weight=val_weight.to_numpy()
       )
       modelos[s] = lgb.train(
         params,
