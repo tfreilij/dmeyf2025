@@ -63,13 +63,13 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
 
 
 def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
-    logger.info("Undersampling Continuas")
+    logger.info(f"Undersampling Continuas with fraction : {fraction} , DF shape : {df.shape}")
     
     clientes_solo_continuas = df.group_by("numero_de_cliente").agg(n_bajas=pl.col("clase_binaria").sum()).filter(pl.col("n_bajas") == 0)
     clientes_continua = clientes_solo_continuas['numero_de_cliente']
     clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-fraction, seed=1000)
     df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled["numero_de_cliente"]))
-
+    logger.info(f"DF shape after undersampling: {df.shape}")
     return df
 
 def ganancia_evaluator(y_pred, y_true) -> float:
@@ -215,6 +215,8 @@ logging.basicConfig(
     ]
 )
 
+
+logger.info(f"Config : {config}")
 
 logger.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
