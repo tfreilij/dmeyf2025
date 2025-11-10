@@ -258,6 +258,8 @@ df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
+
+logger.info(f"Cantidad por meses : {df.group_by(["foto_mes"]).count()}")
 logger.info(f"MES VALIDACION : {MES_VALIDACION}")
 logger.info(f"Dataframe Validacion : {df_val.shape}")
 logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
