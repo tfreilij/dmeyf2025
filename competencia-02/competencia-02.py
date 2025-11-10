@@ -302,10 +302,18 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         'num_iterations': num_iterations,
         'feval' : lgb_gan_eval
         }
+
+      df_val_y = df_val["clase_binaria"]
+      df_val_X = df_val.drop(["clase_binaria"])
+
+      val_data = lgb.Dataset(
+          df_val_X.to_pandas(),
+          label=df_val_y.to_pandas()
+)
       modelos[s] = lgb.train(
         params,
         train_data,
-        valid_sets=[df_val],
+        valid_sets=[val_data],
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
       )
     
