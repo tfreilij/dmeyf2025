@@ -2,11 +2,12 @@ from token import SEMI
 import polars as pl
 import numpy as np
 import logging
-import yaml
 import os
 import datetime
 
 from load_config import Config
+
+logger = logging.getLogger(__name__)
 
 config = Config()
 BUCKET = config["BUCKET"]
@@ -14,12 +15,23 @@ RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 UNDERSAMPLING_FRACTION = config["UNDERSAMPLING_FRACTION"]
 DATASET_FE_FILE = config["DATASET_FE_FILE"]
 DATASET_UNDERSAMPLED_FILE =  config["DATASET_UNDERSAMPLED_FILE"]
+MES_TRAIN = config["MES_TRAIN"]
 
 train_test_models = config["TRAIN_TEST_MODELS"]
 
 os.makedirs(f"{BUCKET}/log", exist_ok=True)
 
-logger = logging.getLogger(__name__)
+fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+nombre_log = f"log_undersample_{fecha}.log"
+log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
+        logging.StreamHandler()
+    ]
+)
 
 def generate_clase_binaria(df : pl.DataFrame):
 
@@ -32,13 +44,12 @@ def generate_clase_binaria(df : pl.DataFrame):
     return df
 
 
-fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-nombre_log = f"log_undersample_{fecha}.log"
-
 logger.info(f"Config : {config}")
 
 logger.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
+
+df = df.filter(pl.col("foto_mes").is_in(MES_TRAIN))
 
 logger.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
