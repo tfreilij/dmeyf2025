@@ -250,7 +250,7 @@ df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 
-df_val = df_train.filter(pl.col('foto_mes') == MES_VALIDACION)
+df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 
 df_train = df_train.drop(['foto_mes'])
 df_test = df_test.drop(['foto_mes'])
