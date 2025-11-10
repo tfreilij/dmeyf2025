@@ -237,7 +237,7 @@ logging.info("Drop Columns")
 df = drop_columns(df)
 
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
-df_test = df.filter(pl.col('foto_mes') == MES_VALIDACION)
+df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
