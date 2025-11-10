@@ -47,14 +47,15 @@ def binarize_predictions(y_pred):
 
 def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
   predicciones = {}
-
+  logger.info(f"Build predictions")
   for seed,model in modelos.items():
     if seed in SEMILLA:
-      print(f"Semilla: {seed}")
+      logger.info(f"Semilla: {seed}")
+      
       predictions = model.predict(dataset)
       predicciones[seed] = predictions
       if y_true is not None:
-        print(f"Ganancias de Modelo con semilla {seed}:", ganancia_prob(predictions, y_true,threshold))
+        logger.info(f"Ganancias de Modelo con semilla {seed}:", ganancia_prob(predictions, y_true,threshold))
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': binarize_predictions(mean_predictions,threshold)})
@@ -74,8 +75,9 @@ def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
 
 def ganancia_evaluator(y_pred, y_true) -> float:
 
+    logger.info("Ganancia evaluator")
     y_true = y_true.get_label()
-  
+
     # Convertir a DataFrame de Polars para procesamiento eficiente
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred})
   
@@ -329,11 +331,14 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       val_weight = df_val["clase_peso"]
       df_val_X = df_val.drop(["clase_binaria","clase_peso"])
       logger.info(f"DF_VAL Columns : {len(df_val_X.columns)}")
+      logger.info(f"DF_VAL Weights : {len(val_weight)}")
+      logger.info(f"DF_VAL Clase_binaria : {len(df_val_y)}")
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas(),
           weight=val_weight.to_numpy()
       )
+      logger.info(f"Built Dataset")
       modelos[s] = lgb.train(
         params,
         train_data,
@@ -341,6 +346,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
       )
     
+
     optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=THRESHOLD, y_true=df_test_clase_binaria_baja)
   
     _, ganancia_total, _ = ganancia_evaluator(optimization_predictions, df_val)
