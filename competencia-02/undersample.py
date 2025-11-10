@@ -21,6 +21,18 @@ train_test_models = config["TRAIN_TEST_MODELS"]
 os.makedirs(f"{BUCKET}/log", exist_ok=True)
 
 logger = logging.getLogger(__name__)
+
+def generate_clase_binaria(df : pl.DataFrame):
+
+    df = df.with_columns(pl.lit(0).alias('clase_binaria'))
+
+    df = df.with_columns(
+        pl.when(pl.col('clase_ternaria').is_in(['BAJA+2','BAJA+1'])).then(pl.lit(1)).otherwise(pl.lit(0)).alias('clase_binaria')
+    )
+
+    return df
+
+
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_undersample_{fecha}.log"
 
@@ -28,6 +40,9 @@ logger.info(f"Config : {config}")
 
 logger.info("Read DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
+
+logger.info("Generate Clase Binaria")
+df = generate_clase_binaria(df)
 
 logger.info(f"Undersampling Continuas with fraction : {FRACTION} , DF shape : {df.shape}")
 
