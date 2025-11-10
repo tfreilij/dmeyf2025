@@ -262,6 +262,7 @@ df_train = df_train.drop(['foto_mes'])
 df_test = df_test.drop(['foto_mes'])
 df_predict = df_predict.drop(['foto_mes'])
 df_train_predict = df_train_predict.drop(['foto_mes'])
+df_val = df_val.drop(['foto_mes'])
 
 df_train_weight = df_train['clase_peso']
 df_train_clase_binaria_baja = df_train['clase_binaria']
