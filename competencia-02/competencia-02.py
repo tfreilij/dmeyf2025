@@ -258,7 +258,8 @@ df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
-
+logger.info(f"MES VALIDACION : {MES_VALIDACION}")
+logger.info(f"Dataframe Validacion : {df_val.shape}")
 logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
 df_train = df_train.drop(['foto_mes'])
 df_test = df_test.drop(['foto_mes'])
@@ -335,7 +336,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       logger.info(f"DF_VAL Columns : {len(df_val.columns)}")
       logger.info(f"DF_VAL Weights : {df_val_weight.shape}")
       logger.info(f"DF_VAL Clase_binaria : {df_val_clase_binaria.shape}")
-      
+
       val_data = lgb.Dataset(
           df_val.to_pandas(),
           label=df_val_clase_binaria.to_pandas(),
