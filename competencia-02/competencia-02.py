@@ -314,7 +314,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas(),
-          weigth=val_weight
+          weight=val_weight
       )
       modelos[s] = lgb.train(
         params,
