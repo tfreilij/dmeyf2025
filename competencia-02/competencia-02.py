@@ -18,13 +18,22 @@ def drop_columns(df : pl.DataFrame):
     logger.info("Dropping columns")
 
     col_drops = [
-          "numero_de_cliente", "active_quarter", "clase_ternaria",
+          "numero_de_cliente", 'tmobile_app', "active_quarter", "clase_ternaria",
           "cliente_edad", "cliente_antiguedad",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
-          "Visa_Fvencimiento", "Master_Fvencimiento"
-    ]
+          "Visa_Fvencimiento", "Master_Fvencimiento",  "delta_1_delta_1_Visa_Finiciomora",
+    "delta_2_delta_1_Visa_Finiciomora",
+    "sum_delta_delta_1_Visa_Finiciomora",
+    "delta_1_delta_2_Visa_Finiciomora",
+    "delta_2_delta_2_Visa_Finiciomora",
+    "sum_delta_delta_2_Visa_Finiciomora",
+    "delta_1_sum_delta_Visa_Finiciomora",
+    "delta_2_sum_delta_Visa_Finiciomora",
+    "sum_delta_sum_delta_Visa_Finiciomora"
+      ]
 
-    df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares'])
+    #df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares'])
+    df = df.drop(col_drops)
     return df
 
 def ganancia_prob(y_pred, y_true, threshold,prop = 1):
@@ -120,26 +129,6 @@ def lgb_gan_eval(y_pred, data):
     ganancia = np.cumsum(ganancia)
 
     return 'gan_eval', np.max(ganancia) , True
-
-def drop_columns(df : pl.DataFrame):
-  cols = ["clase_ternaria",
-  "delta_1_delta_1_Visa_Finiciomora",
-  "delta_2_delta_1_Visa_Finiciomora",
-  "sum_delta_delta_1_Visa_Finiciomora",
-  "delta_1_delta_2_Visa_Finiciomora",
-  "delta_2_delta_2_Visa_Finiciomora",
-  "sum_delta_delta_2_Visa_Finiciomora",
-  "delta_1_sum_delta_Visa_Finiciomora",
-  "delta_2_sum_delta_Visa_Finiciomora",
-  "sum_delta_sum_delta_Visa_Finiciomora",
-  ]
-
-  df = df.drop(cols)
-
-  return df
-
-
-
 
 
 def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test, run_bayesian_optimization) -> list:
@@ -238,9 +227,6 @@ df = aplicar_undersampling(df, FRACTION)
 
 logging.info("Generate Clase Peso")
 df = generate_clase_peso(df)
-
-
-df = drop_columns(df)
 
 
 cols_to_cast = [c for c, dtype in zip(df.columns, df.dtypes) if dtype == pl.Utf8]
