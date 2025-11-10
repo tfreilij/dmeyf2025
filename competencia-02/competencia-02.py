@@ -122,7 +122,7 @@ def lgb_gan_eval(y_pred, data):
     return 'gan_eval', np.max(ganancia) , True
 
 
-def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test) -> list:
+def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test, run_bayesian_optimization) -> list:
 
   train_dataset_pd = train_dataset.to_pandas()
   y_target_pd = y_target.to_pandas()
@@ -346,7 +346,7 @@ for seed in SEMILLA:
     print(f"El modelo de Test para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
 
 if train_test_models:
-  test_models = build_and_save_models(SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True)
+  test_models = build_and_save_models(SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
 
 
 train_predict_models = True
@@ -364,7 +364,7 @@ for seed in SEMILLA:
     print(f"El modelo de Predicción para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
 
 if train_predict_models:
-  predict_models = build_and_save_models(SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False)
+  predict_models = build_and_save_models(SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
 
 
 test_predictions = build_predictions(clientes_test, test_models, df_test, threshold=THRESHOLD, y_true=df_test_clase_binaria_baja)
