@@ -182,7 +182,7 @@ MES_TRAIN = config["MES_TRAIN"]
 MES_VALIDACION = config["MES_VALIDACION"]
 BUCKET = config["BUCKET"]
 STUDY_NAME = config["STUDY_NAME"]
-DATASET_FE_FILE = config["DATASET_FE_FILE"]
+DATASET_UNDERSAMPLE_FILE = config["DATASET_UNDERSAMPLE_FILE"]
 GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
 COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
 FINAL_PREDICT = config["FINAL_PREDICT"]
@@ -197,7 +197,7 @@ RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 
 debug = False
 submit = True
-train_test_models = True
+train_test_models = config["TRAIN_TEST_MODELS"]
 
 os.makedirs(f"{BUCKET}/logs", exist_ok=True)
 
@@ -218,14 +218,11 @@ logging.basicConfig(
 
 logger.info(f"Config : {config}")
 
-logger.info("Read DataFrame")
-df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
+logger.info("Read Undersampled DataFrame")
+df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLE_FILE))
 
 logger.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
-
-logger.info("Apply Undersampling")
-df = aplicar_undersampling(df, FRACTION)
 
 logger.info("Generate Clase Peso")
 df = generate_clase_peso(df)
