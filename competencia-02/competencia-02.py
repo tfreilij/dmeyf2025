@@ -182,7 +182,7 @@ MES_TRAIN = config["MES_TRAIN"]
 MES_VALIDACION = config["MES_VALIDACION"]
 BUCKET = config["BUCKET"]
 STUDY_NAME = config["STUDY_NAME"]
-DATASET_UNDERSAMPLE_FILE = config["DATASET_UNDERSAMPLE_FILE"]
+DATASET_UNDERSAMPLED_FILE = config["DATASET_UNDERSAMPLED_FILE"]
 GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
 COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
 FINAL_PREDICT = config["FINAL_PREDICT"]
@@ -219,7 +219,7 @@ logging.basicConfig(
 logger.info(f"Config : {config}")
 
 logger.info("Read Undersampled DataFrame")
-df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLE_FILE))
+df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLED_FILE))
 
 #logger.info("Generate Clase Binaria")
 #df = generate_clase_binaria(df)
