@@ -305,7 +305,6 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         'seed': s,
         'verbose': -1,
         'num_iterations': num_iterations,
-        'feval' : lgb_gan_eval
         }
 
       df_val_y = df_val["clase_binaria"]
