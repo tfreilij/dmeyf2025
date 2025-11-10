@@ -308,11 +308,13 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         }
 
       df_val_y = df_val["clase_binaria"]
-      df_val_X = df_val.drop(["clase_binaria"])
+      val_weight = df_val["clase_peso"]
+      df_val_X = df_val.drop(["clase_binaria","clase_peso"])
 
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
-          label=df_val_y.to_pandas()
+          label=df_val_y.to_pandas(),
+          weigth=val_weight
       )
       modelos[s] = lgb.train(
         params,
