@@ -266,15 +266,20 @@ df_predict = df_predict.drop(['foto_mes'])
 df_train_predict = df_train_predict.drop(['foto_mes'])
 df_val = df_val.drop(['foto_mes'])
 
-df_train_weight = df_train['clase_peso']
+
 df_train_clase_binaria_baja = df_train['clase_binaria']
 df_test_clase_binaria_baja = df_test['clase_binaria']
-
 df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
+df_val_clase_binaria = df_val['clase_binaria']
+
+
 df_train_predict_weight = df_train_predict['clase_peso']
+df_val_weight = df_val['clase_peso']
+df_train_weight = df_train['clase_peso']
 
 df_train = df_train.drop(['clase_binaria','clase_peso'])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso'])
+df_val = df_val.drop(['clase_binaria','clase_peso'])
 df_test = df_test.drop(['clase_binaria','clase_peso'])
 df_predict = df_predict.drop(['clase_binaria','clase_peso'])
 
@@ -327,16 +332,14 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         'num_iterations': num_iterations,
         }
 
-      df_val_y = df_val["clase_binaria"]
-      val_weight = df_val["clase_peso"]
-      df_val_X = df_val.drop(["clase_binaria","clase_peso"])
-      logger.info(f"DF_VAL Columns : {len(df_val_X.columns)}")
-      logger.info(f"DF_VAL Weights : {len(val_weight)}")
-      logger.info(f"DF_VAL Clase_binaria : {len(df_val_y)}")
+      logger.info(f"DF_VAL Columns : {len(df_val.columns)}")
+      logger.info(f"DF_VAL Weights : {df_val_weight.shape}")
+      logger.info(f"DF_VAL Clase_binaria : {df_val_clase_binaria.shape}")
+      
       val_data = lgb.Dataset(
-          df_val_X.to_pandas(),
-          label=df_val_y.to_pandas(),
-          weight=val_weight.to_numpy()
+          df_val.to_pandas(),
+          label=df_val_clase_binaria.to_pandas(),
+          weight=df_val_weight.to_numpy()
       )
       logger.info(f"Built Dataset")
       modelos[s] = lgb.train(
