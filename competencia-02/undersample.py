@@ -10,9 +10,8 @@ from load_config import Config
 
 config = Config()
 BUCKET = config["BUCKET"]
-FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
-FRACTION = config["UNDERSAMPLING_FRACTION"]
+UNDERSAMPLING_FRACTION = config["UNDERSAMPLING_FRACTION"]
 DATASET_FE_FILE = config["DATASET_FE_FILE"]
 DATASET_UNDERSAMPLED_FILE: config["DATASET_UNDERSAMPLED_FILE"]
 
@@ -44,11 +43,11 @@ df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
 logger.info("Generate Clase Binaria")
 df = generate_clase_binaria(df)
 
-logger.info(f"Undersampling Continuas with fraction : {FRACTION} , DF shape : {df.shape}")
+logger.info(f"Undersampling Continuas with fraction : {UNDERSAMPLING_FRACTION} , DF shape : {df.shape}")
 
 clientes_solo_continuas = df.group_by("numero_de_cliente").agg(n_bajas=pl.col("clase_binaria").sum()).filter(pl.col("n_bajas") == 0)
 clientes_continua = clientes_solo_continuas['numero_de_cliente']
-clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-FRACTION, seed=1000)
+clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-UNDERSAMPLING_FRACTION, seed=1000)
 df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled["numero_de_cliente"]))
 logger.info(f"DF shape after undersampling: {df.shape}")
 
