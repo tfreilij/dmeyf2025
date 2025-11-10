@@ -300,7 +300,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     y_pd = y.to_pandas()
     weight_pd = weight.to_pandas()
 
-    logger.info(f"PD Columns : {X_pd.columns}")
+    logger.info(f"PD Columns : {len(X_pd.columns)}")
     train_data = lgb.Dataset(X_pd,
                                 label=y_pd,
                                 weight=weight_pd.to_numpy())
@@ -328,7 +328,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
       df_val_y = df_val["clase_binaria"]
       val_weight = df_val["clase_peso"]
       df_val_X = df_val.drop(["clase_binaria","clase_peso"])
-      logger.info(f"DF_VAL Columns : {df_val_X.columns}")
+      logger.info(f"DF_VAL Columns : {len(df_val_X.columns)}")
       val_data = lgb.Dataset(
           df_val_X.to_pandas(),
           label=df_val_y.to_pandas(),
