@@ -14,6 +14,23 @@ from load_config import Config
 
 logger = logging.getLogger(__name__)
 
+config = Config()
+MES_TRAIN = config["MES_TRAIN"]
+MES_VALIDACION = config["MES_VALIDACION"]
+BUCKET = config["BUCKET"]
+STUDY_NAME = config["STUDY_NAME"]
+DATASET_UNDERSAMPLED_FILE = config["DATASET_UNDERSAMPLED_FILE"]
+GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
+COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
+FINAL_PREDICT = config["FINAL_PREDICT"]
+MES_TEST = config["MES_TEST"]
+FINAL_TRAIN = config["FINAL_TRAIN"]
+SEMILLA = config["SEMILLA"]
+MODELOS_PATH = config["MODELOS_PATH"]
+SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
+FRACTION = config["UNDERSAMPLING_FRACTION"]
+RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
+
 def drop_columns(df : pl.DataFrame):
     logger.info("Dropping columns")
 
@@ -73,18 +90,18 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     # Convertir a DataFrame de Polars para procesamiento eficiente
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
   
-    # Ordenar por probabilidad descendente
-    df_ordenado = df_eval.sort('y_pred_proba', descending=True)
-  
-    # Calcular ganancia individual para cada cliente
-    df_ordenado = df_ordenado.with_columns([pl.when(pl.col('y_true') == 1).then(GANANCIA_ACIERTO).otherwise(-COSTO_ESTIMULO).alias('ganancia_individual')])
-  
-    # Calcular ganancia acumulada
-    df_ordenado = df_ordenado.with_columns([pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada')])
-  
-    # Encontrar la ganancia máxima
+    df_ordenado = df_ordenado.with_columns([
+        pl.when(pl.col('y_true') == 1)
+          .then(GANANCIA_ACIERTO)
+          .otherwise(-COSTO_ESTIMULO)
+          .alias('ganancia_individual')
+    ])
+    
+    df_ordenado = df_ordenado.with_columns([
+        pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada')
+    ])
+    
     ganancia_maxima = df_ordenado.select(pl.col('ganancia_acumulada').max())[0, 0]
-  
     return ganancia_maxima
 
 
@@ -171,22 +188,7 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
       model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
   return modelos
 
-config = Config()
-MES_TRAIN = config["MES_TRAIN"]
-MES_VALIDACION = config["MES_VALIDACION"]
-BUCKET = config["BUCKET"]
-STUDY_NAME = config["STUDY_NAME"]
-DATASET_UNDERSAMPLED_FILE = config["DATASET_UNDERSAMPLED_FILE"]
-GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
-COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
-FINAL_PREDICT = config["FINAL_PREDICT"]
-MES_TEST = config["MES_TEST"]
-FINAL_TRAIN = config["FINAL_TRAIN"]
-SEMILLA = config["SEMILLA"]
-MODELOS_PATH = config["MODELOS_PATH"]
-SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
-FRACTION = config["UNDERSAMPLING_FRACTION"]
-RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
+
 
 THRESHOLD = 0.1
 
