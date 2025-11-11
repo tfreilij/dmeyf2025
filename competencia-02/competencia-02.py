@@ -231,12 +231,12 @@ clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
 clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
-df = drop_columns(df)
-
 df = generate_clase_peso(df)
 
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
+
+df = drop_columns(df)
 
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
