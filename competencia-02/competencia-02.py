@@ -67,7 +67,6 @@ def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
     logger.info(f"Undersampling Continuas with fraction : {fraction} , DF shape : {df.shape}")
     
     clientes_solo_continuas = df.group_by("numero_de_cliente").agg(n_bajas=pl.col("clase_binaria").sum()).filter(pl.col("n_bajas") == 0)
-    clientes_continua = clientes_solo_continuas['numero_de_cliente']
     clientes_solo_continuas_undersampled = clientes_solo_continuas.sample(fraction=1-fraction, seed=1000)
     df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_undersampled["numero_de_cliente"]))
     logger.info(f"DF shape after undersampling: {df.shape}")
@@ -192,10 +191,11 @@ MES_TEST = config["MES_TEST"]
 FINAL_TRAIN = config["FINAL_TRAIN"]
 SEMILLA = config["SEMILLA"]
 MODELOS_PATH = config["MODELOS_PATH"]
-THRESHOLD = config["THRESHOLD"]
 SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
 FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
+
+THRESHOLD = 0.1
 
 debug = False
 submit = True
@@ -223,6 +223,7 @@ logger.info(f"Config : {config}")
 logger.info("Read Undersampled DataFrame")
 df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLED_FILE))
 
+logger.info(f"Dataframe size : {df.shape}")
 #logger.info("Generate Clase Binaria")
 #df = generate_clase_binaria(df)
 
@@ -352,8 +353,11 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
       )
     
-
-    optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=THRESHOLD, y_true=df_test_clase_binaria_baja)
+    max_prediction = 0
+    for threshold in [0.05,0.075,0.1,0.125,0.15,0.175]:
+      optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_test_clase_binaria_baja)
+      if optimization_predictions > max_prediction:
+        max_prediction = optimization_predictions
   
     _, ganancia_total, _ = ganancia_evaluator(optimization_predictions, df_val)
 
