@@ -17,22 +17,14 @@ logger = logging.getLogger(__name__)
 def drop_columns(df : pl.DataFrame):
     logger.info("Dropping columns")
 
-    col_drops = [
+    col_drops = ["Visa_Finiciomora","delta_1_Visa_Finiciomora", ""
           "numero_de_cliente", 'tmobile_app', "active_quarter", "clase_ternaria",
           "cliente_edad", "cliente_antiguedad",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
-          "Visa_Fvencimiento", "Master_Fvencimiento",  "delta_1_delta_1_Visa_Finiciomora",
-    "delta_2_delta_1_Visa_Finiciomora",
-    "sum_delta_delta_1_Visa_Finiciomora",
-    "delta_1_delta_2_Visa_Finiciomora",
-    "delta_2_delta_2_Visa_Finiciomora",
-    "sum_delta_delta_2_Visa_Finiciomora",
-    "delta_1_sum_delta_Visa_Finiciomora",
-    "delta_2_sum_delta_Visa_Finiciomora",
-    "sum_delta_sum_delta_Visa_Finiciomora"
+          "Visa_Fvencimiento", "Master_Fvencimiento"
       ]
 
-    #df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares'])
+    df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares', 'mprestamos_personales'])
     df = df.drop(col_drops)
     return df
 

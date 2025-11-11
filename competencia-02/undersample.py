@@ -64,4 +64,4 @@ logger.info(f"DF shape after undersampling: {df.shape}")
 
 logger.info("Writing dataset")
 df.write_csv(os.path.join(config.__getitem__("BUCKET"),DATASET_UNDERSAMPLED_FILE))
-logger.info(f"Dataset written to {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE"))}")
+logger.info(f"Dataset written to {os.path.join(config.__getitem__("BUCKET"),DATASET_UNDERSAMPLED_FILE)}")
