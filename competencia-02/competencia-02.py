@@ -227,8 +227,8 @@ submit = True
 
 logger.info(f"Config : {config}")
 
-logger.info(f"Read Undersampled DataFrame : {os.path.join(BUCKETS,BUCKET_ORIGIN,UNDERSAMPLED_DATASET)}")
-df = pl.read_csv(os.path.join(BUCKETS,BUCKET_ORIGIN,UNDERSAMPLED_DATASET))
+logger.info(f"Read Undersampled DataFrame : {os.path.join(BUCKETS,BUCKET_TARGET,UNDERSAMPLED_DATASET)}")
+df = pl.read_csv(os.path.join(BUCKETS,BUCKET_TARGET,UNDERSAMPLED_DATASET))
 logger.info(f"Dataframe size : {df.shape}")
 
 df = generate_clase_peso(df)
