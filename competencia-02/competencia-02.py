@@ -46,9 +46,6 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
       predictions = model.predict(dataset)
       predicciones[seed] = predictions
       if y_true is not None:
-        logger.info(f"PREDICTIONS : {predictions}")
-        logger.info(f"Y_TRUE : {y_true}")
-        logger.info(f"THRESHOLD : {threshold}")
         logger.info(f"Ganancias de Modelo con semilla {seed}: {ganancia_prob(predictions, y_true,threshold)}")
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
@@ -350,10 +347,10 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     max_prediction = 0
     for threshold in [0.05,0.075,0.1,0.125,0.15,0.175]:
       optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_val_clase_binaria)
-      if optimization_predictions > max_prediction:
+      if ganancia_evaluator(optimization_predictions, df_val) > max_prediction:
         max_prediction = optimization_predictions
   
-    _, ganancia_total, _ = ganancia_evaluator(optimization_predictions, df_val)
+    _, ganancia_total, _ = ganancia_evaluator(max_prediction, df_val)
 
     logger.info(f"Trial {trial.number}: Ganancia = {ganancia_total:,.0f}")
   
