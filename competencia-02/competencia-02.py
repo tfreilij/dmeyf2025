@@ -89,7 +89,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
 
     # Convertir a DataFrame de Polars para procesamiento eficiente
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
-  
+    df_ordenado = df_eval.sort('y_pred_proba', descending=True)
     df_ordenado = df_ordenado.with_columns([
         pl.when(pl.col('y_true') == 1)
           .then(GANANCIA_ACIERTO)
