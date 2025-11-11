@@ -16,31 +16,53 @@ logger = logging.getLogger(__name__)
 
 config = Config()
 MES_TRAIN = config["MES_TRAIN"]
+BUCKETS = config["BUCKETS"]
+BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
+BUCKET_TARGET = config["BUCKET_TARGET"]
+UNDERSAMPLED_DATASET = config["UNDERSAMPLED_DATASET"]
 MES_VALIDACION = config["MES_VALIDACION"]
-BUCKET = config["BUCKET"]
 STUDY_NAME = config["STUDY_NAME"]
-DATASET_UNDERSAMPLED_FILE = config["DATASET_UNDERSAMPLED_FILE"]
 GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
 COSTO_ESTIMULO = config["COSTO_ESTIMULO"]
 FINAL_PREDICT = config["FINAL_PREDICT"]
 MES_TEST = config["MES_TEST"]
 FINAL_TRAIN = config["FINAL_TRAIN"]
 SEMILLA = config["SEMILLA"]
-MODELOS_PATH = config["MODELOS_PATH"]
 SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
 FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 
-def drop_columns(df : pl.DataFrame):
-    logger.info("Dropping columns")
+submission_number = 1
 
-    col_drops = ["Visa_Finiciomora","active_quarter", "clase_ternaria",
-          "cliente_edad", "cliente_antiguedad",
+bucket_target = os.path.join(BUCKETS,BUCKET_TARGET)
+modelos_directory = os.path.join(BUCKETS,BUCKET_TARGET,"modelos")
+
+fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
+log_directory = os.path.join(bucket_target,"log")
+
+os.makedirs(log_directory, exist_ok=True)
+os.makedirs(modelos_directory, exist_ok=True)
+log_path = os.path.join(log_directory,"log", nombre_log)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
+        logging.StreamHandler()
+    ]
+)
+
+def drop_columns(df : pl.DataFrame):
+    logger.info("Drop columns")
+
+    col_drops = ["clase_ternaria",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
           "Visa_Fvencimiento", "Master_Fvencimiento"
       ]
 
-    df = df.drop(['numero_de_cliente','tmobile_app','mplazo_fijo_dolares', 'mprestamos_personales'])
+    df = df.drop(['numero_de_cliente','tmobile_app','mprestamos_personales'])
     df = df.drop(col_drops)
     return df
 
@@ -53,22 +75,17 @@ def binarize_predictions(y_pred,threshold):
     return np.where(y_pred >= threshold, 1, 0)
 
 
-def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
+def build_predictions(clientes, modelos, dataset):
   predicciones = {}
   logger.info(f"Build predictions")
   for seed,model in modelos.items():
     if seed in SEMILLA:
       logger.info(f"Semilla: {seed}")
-      
       predictions = model.predict(dataset)
       predicciones[seed] = predictions
-      if y_true is not None:
-        logger.info(f"Ganancias de Modelo con semilla {seed}: {ganancia_prob(predictions, y_true,threshold)}")
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': mean_predictions})
-
-
 
 
 def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
@@ -87,27 +104,31 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     logger.info(f"Y_pred : {y_pred}")
     y_true = y_true
 
-    # Convertir a DataFrame de Polars para procesamiento eficiente
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
     df_ordenado = df_eval.sort('y_pred_proba', descending=True)
     df_ordenado = df_ordenado.with_columns([
         pl.when(pl.col('y_true') == 1)
           .then(GANANCIA_ACIERTO)
           .otherwise(-COSTO_ESTIMULO)
-          .alias('ganancia_individual')
+          .alias('ganancia_individual'), pl.lit(1).alias('indice')
     ])
     
     df_ordenado = df_ordenado.with_columns([
-        pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada')
+        pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada'),
+        pl.col('indice').cum_sum().alias('indice_acumulado')
     ])
     
-    ganancia_maxima = df_ordenado.select(pl.col('ganancia_acumulada').max()).to_series()[0]
-    logger.info(f"GANANCIA MAXIMA : {ganancia_maxima}")
-    return ganancia_maxima
+    #ganancia_maxima = df_ordenado.select([pl.col('ganancia_acumulada').max(),pl.col('indice_acumulado')]).to_series()
+    envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada').max()).head(0)
 
+    ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada')
+    cantidad_envios = envios_ganancia_maxima.select('indice_acumulado')
+    logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
+    return ganancia_maxima, cantidad_envios
 
 def generate_clase_peso(df : pl.DataFrame):
 
+    logger.info("Generate Clase Peso")
     df = df.with_columns(
         pl.lit(1.0).alias('clase_peso')
     ).with_columns(
@@ -154,10 +175,9 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
                               weight=weight_pd)
 
   modelos = {}
-  print(f"Construimos los models para las semillas : {semillas}")
 
   for seed in semillas:
-    print(f"Semilla: {seed}")
+    logger.info(f"Construimos el modelo para la semilla : {seed}")
 
     params = {
             'objective': 'binary',
@@ -184,99 +204,69 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
 
     modelos[seed] = model
     if is_test:
-      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt')
+      model.save_model(os.path.join(modelos_directory,f"lgb_test_{seed}_{submission_number}.txt"))
     else:
-      model.save_model(os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt')
+      model.save_model(os.path.join(modelos_directory,f"lgb_predict_{seed}_{submission_number}.txt"))
   return modelos
-
-
-
-THRESHOLD = 0.1
 
 debug = False
 submit = True
 train_test_models = config["TRAIN_TEST_MODELS"]
 
-os.makedirs(f"{BUCKET}/log", exist_ok=True)
-
-fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-nombre_log = f"log_{STUDY_NAME}_{fecha}.log"
-
-log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
-    handlers=[
-        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
-        logging.StreamHandler()
-    ]
-)
-
-
 logger.info(f"Config : {config}")
 
-logger.info("Read Undersampled DataFrame")
-df = pl.read_csv(os.path.join(BUCKET,DATASET_UNDERSAMPLED_FILE))
-
+logger.info(f"Read Undersampled DataFrame : {os.path.join(BUCKETS,BUCKET_ORIGIN,UNDERSAMPLED_DATASET)}")
+df = pl.read_csv(os.path.join(BUCKETS,BUCKET_ORIGIN,UNDERSAMPLED_DATASET))
 logger.info(f"Dataframe size : {df.shape}")
-#logger.info("Generate Clase Binaria")
-#df = generate_clase_binaria(df)
 
-logger.info("Generate Clase Peso")
 df = generate_clase_peso(df)
 
-logger.info("Cast every column to Float64")
+logger.info("Cast every String column to Float64")
 cols_to_cast = [c for c, dtype in zip(df.columns, df.dtypes) if dtype == pl.Utf8]
 
-# Castear esas columnas a Float64 (de forma segura)
 train_dataset = df.with_columns([
   pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
 ])
 
-logger.info("Split DataFrame")
+logger.info("Split Dataset")
+logger.info(f"MES_TRAIN : {MES_TRAIN}")
+logger.info(f"MES_VALIDACION : {MES_VALIDACION}")
+logger.info(f"MES_TEST : {MES_TEST}")
+logger.info(f"FINAL_PREDICT : {FINAL_PREDICT}")
+logger.info(f"FINAL_TRAIN : {FINAL_TRAIN}")
+
+logger.info("Split Clientes")
 clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
 clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
-logger.info("Drop Columns")
 df = drop_columns(df)
 
-
-logger.info("Split Dataset")
-logger.info(f"MES_TRAIN : {MES_TRAIN}")
-logger.info(f"MES_TEST : {MES_TEST}")
-logger.info(f"FINAL_PREDICT : {FINAL_PREDICT}")
-logger.info(f"FINAL_PREDICT : {FINAL_TRAIN}")
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
-
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
-
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 
-logger.info(f"Cantidad por meses : {df.group_by(["foto_mes"]).count()}")
-logger.info(f"MES VALIDACION : {MES_VALIDACION}")
-logger.info(f"Dataframe Validacion : {df_val.shape}")
-logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
+logger.info("Drop columns foto_mes")
+
 df_train = df_train.drop(['foto_mes'])
 df_test = df_test.drop(['foto_mes'])
 df_predict = df_predict.drop(['foto_mes'])
 df_train_predict = df_train_predict.drop(['foto_mes'])
 df_val = df_val.drop(['foto_mes'])
 
-
 df_train_clase_binaria_baja = df_train['clase_binaria']
 df_test_clase_binaria_baja = df_test['clase_binaria']
 df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
 df_val_clase_binaria = df_val['clase_binaria']
-logger.info(f"DF_VAL clase binaria : {df_val_clase_binaria.shape}")
 
 df_train_predict_weight = df_train_predict['clase_peso']
 df_val_weight = df_val['clase_peso']
 df_train_weight = df_train['clase_peso']
 
+
+logger.info("Drop columns clase_binaria and clase_peso")
 df_train = df_train.drop(['clase_binaria','clase_peso'])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso'])
 df_val = df_val.drop(['clase_binaria','clase_peso'])
@@ -284,10 +274,35 @@ df_test = df_test.drop(['clase_binaria','clase_peso'])
 df_predict = df_predict.drop(['clase_binaria','clase_peso'])
 
 
-resultados_medias = []
+cols_to_cast = [c for c, dtype in zip(X.columns, X.dtypes) if dtype == pl.Utf8]
 
-def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame) -> float:
+train_dataset = df_train.with_columns([
+  pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
+])
 
+
+opt_train_pd = train_dataset.to_pandas()
+opt_y_pd = df_train_clase_binaria_baja.to_pandas()
+opt_weight_pd = df_train_weight.to_pandas()
+
+logger.info(f"Opt Train Data : {len(opt_train_pd.columns)} , {opt_y_pd.shape} , {opt_weight_pd.shape}")
+train_data = lgb.Dataset(opt_train_pd,
+                            label=opt_y_pd,
+                            weight=opt_weight_pd.to_numpy())
+
+opt_X_val_pd = df_val.to_pandas()
+opt_y_val_pd = df_val_clase_binaria.to_pandas()
+weight_val_pd = df_val_weight.to_pandas()
+logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
+val_data = lgb.Dataset(
+      opt_X_val_pd,
+      label=opt_y_val_pd,
+      weight=weight_val_pd.to_numpy()
+  )
+
+def objective(trial) -> float:
+
+    logger.info(f"Begin Trial {trial.number}")
     num_leaves = trial.suggest_int('num_leaves', 8, 80)
     learning_rate = trial.suggest_float('learning_rate', 0.01, 0.4)
     max_depth = trial.suggest_int("max_depth", 10, 100)
@@ -295,22 +310,6 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     feature_fraction = trial.suggest_float('feature_fraction', 0.1, 1.0)
     max_bin = trial.suggest_int('max_bin', 255, 500)
     num_iterations = trial.suggest_int('num_iterations', 100, 500)
-
-    cols_to_cast = [c for c, dtype in zip(X.columns, X.dtypes) if dtype == pl.Utf8]
-    
-    train_dataset = X.with_columns([
-      pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
-    ])
-
-    
-    X_pd = train_dataset.to_pandas()
-    y_pd = y.to_pandas()
-    weight_pd = weight.to_pandas()
-
-    logger.info(f"PD Columns : {len(X_pd.columns)}")
-    train_data = lgb.Dataset(X_pd,
-                                label=y_pd,
-                                weight=weight_pd.to_numpy())
 
     modelos = {}
     for s in SEMILLA:
@@ -332,16 +331,6 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         'num_iterations': num_iterations,
         }
 
-      logger.info(f"DF_VAL Columns : {len(df_val.columns)}")
-      logger.info(f"DF_VAL Weights : {df_val_weight.shape}")
-      logger.info(f"DF_VAL Clase_binaria : {df_val_clase_binaria.shape}")
-
-      val_data = lgb.Dataset(
-          df_val.to_pandas(),
-          label=df_val_clase_binaria.to_pandas(),
-          weight=df_val_weight.to_numpy()
-      )
-      logger.info(f"Built Dataset")
       modelos[s] = lgb.train(
         params,
         train_data,
@@ -349,20 +338,12 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
         callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
       )
     
-    max_prediction = 0
-    for threshold in [0.05,0.075,0.1,0.125,0.15,0.175]:
-      optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_val_clase_binaria)
-      if ganancia_evaluator(optimization_predictions,df_val_clase_binaria) > max_prediction:
-        max_prediction = optimization_predictions
-  
-    _, ganancia_total, _ = ganancia_evaluator(max_prediction,df_val_clase_binaria)
-
-    logger.info(f"Trial {trial.number}: Ganancia = {ganancia_total:,.0f}")
-  
+    optimization_predictions = build_predictions(clientes_val, modelos, df_val)
+    ganancia_total,_ = ganancia_evaluator(optimization_predictions,df_val_clase_binaria)
+    logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total:,.0f}")
     return ganancia_total
 
-
-storage_name = f"sqlite:////{os.path.join(BUCKET,STUDY_NAME)}.db"
+storage_name = f"sqlite:////{os.path.join(BUCKETS, BUCKET_TARGET,STUDY_NAME)}.db"
 study_name = STUDY_NAME
 
 study = optuna.create_study(
@@ -372,15 +353,15 @@ study = optuna.create_study(
     load_if_exists=True,
 )
 
-
 if RUN_BAYESIAN_OPTIMIZATION:
   logger.info("Run Optimization")
-  study.optimize(lambda trial: objective(trial, df_train, df_train_clase_binaria_baja, df_train_weight), n_trials=50)
+  study.optimize(lambda trial: objective(trial), n_trials=50)
 
 test_models = {}
 for seed in SEMILLA:
   logger.info(f"Build or Load Test model for seed : {seed}")
-  model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_test_{seed}_{SUBMISSION_NUMBER}.txt'
+  model_name = f"lgb_test_{seed}_{SUBMISSION_NUMBER}.txt"
+  model_file_path = os.path.join(modelos_directory,model_name)
   if os.path.exists(model_file_path):
     logger.info(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
     booster = lgb.Booster(model_file=model_file_path)
@@ -392,31 +373,31 @@ for seed in SEMILLA:
 if train_test_models:
   test_models = build_and_save_models(SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
 
-
 train_predict_models = True
 
 predict_models = {}
 for seed in SEMILLA:
-  logger.info(f"Build or Load Predict model for seed : {seed}")
-  model_file_path = os.path.join(BUCKET,MODELOS_PATH) + f'lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt'
+  model_name = f"lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt"
+  model_file_path = os.path.join(modelos_directory,model_name)
   if os.path.exists(model_file_path):
-    logger.info(f"Cargamos el modelo de Predicción de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
+    logger.info(f"Load Predict model for seed {seed}")
     modelo_anterior = lgb.Booster(model_file=model_file_path)
     predict_models[seed] = modelo_anterior
     train_predict_models = False
   else:
-    logger.info(f"El modelo de Predicción para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
+    logger.info(f"Predict model for seed {seed} does not exist. Will be trained.")
 
 if train_predict_models:
   predict_models = build_and_save_models(SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
 
+test_predictions = build_predictions(clientes_test, test_models, df_test)
+ganancia, n_envios = ganancia_evaluator(test_predictions,df_val_clase_binaria)
 
-test_predictions = build_predictions(clientes_test, test_models, df_test, threshold=THRESHOLD, y_true=df_test_clase_binaria_baja)
-
-kaggle_predictions = build_predictions(clientes_predict, predict_models, df_predict, threshold=THRESHOLD, y_true=None)
+comp_predictions = build_predictions(clientes_predict, predict_models, df_predict)
 
 if submit:
-  logger.info(f"Build submission csv")
-  kaggle_predictions.write_csv(BUCKET + f"predictions_{SUBMISSION_NUMBER}.csv")
+  prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions_{SUBMISSION_NUMBER}.csv")
+  logger.info(f"Build submission {prediction_path}")
+  comp_predictions.write_csv(prediction_path)
 
 logger.info(f"Program Ends")
