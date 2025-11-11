@@ -57,7 +57,7 @@ logging.basicConfig(
 def drop_columns(df : pl.DataFrame):
     logger.info("Drop columns")
 
-    col_drops = ["clase_ternaria",
+    col_drops = ["clase_ternaria","Visa_Finiciomora","Visa_Finiciomora",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
           "Visa_Fvencimiento", "Master_Fvencimiento"
       ]
