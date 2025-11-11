@@ -49,7 +49,7 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
         logger.info(f"PREDICTIONS : {predictions}")
         logger.info(f"Y_TRUE : {y_true}")
         logger.info(f"THRESHOLD : {threshold}")
-        logger.info(f"Ganancias de Modelo con semilla {seed}:", ganancia_prob(predictions, y_true,threshold))
+        logger.info(f"Ganancias de Modelo con semilla {seed}: {ganancia_prob(predictions, y_true,threshold)}")
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': binarize_predictions(mean_predictions,threshold)})
