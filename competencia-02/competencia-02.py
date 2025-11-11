@@ -43,7 +43,7 @@ log_directory = os.path.join(bucket_target,"log")
 
 os.makedirs(log_directory, exist_ok=True)
 os.makedirs(modelos_directory, exist_ok=True)
-log_path = os.path.join(log_directory,"log", nombre_log)
+log_path = os.path.join(log_directory, nombre_log)
 
 logging.basicConfig(
     level=logging.INFO,
