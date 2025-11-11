@@ -83,7 +83,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     df_ordenado = df_ordenado.with_columns([pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada')])
   
     # Encontrar la ganancia máxima
-    ganancia_maxima = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
+    ganancia_maxima = df_ordenado.select(pl.col('ganancia_acumulada').max())[0, 0]
   
     return ganancia_maxima
 
