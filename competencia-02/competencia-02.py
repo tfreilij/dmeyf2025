@@ -285,16 +285,6 @@ def objective(trial) -> float:
                                 label=opt_y_pd,
                                 weight=opt_weight_pd.to_numpy())
 
-    opt_X_val_pd = df_val.to_pandas()
-    opt_y_val_pd = df_val_clase_binaria.to_pandas()
-    weight_val_pd = df_val_weight.to_pandas()
-    logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
-    val_data = lgb.Dataset(
-          opt_X_val_pd,
-          label=opt_y_val_pd,
-          weight=weight_val_pd.to_numpy()
-      )
-
     modelos = {}
     for s in SEMILLA:
       params = {
@@ -314,6 +304,16 @@ def objective(trial) -> float:
         'verbose': -1,
         'num_iterations': num_iterations,
         }
+
+      opt_X_val_pd = df_val.to_pandas()
+      opt_y_val_pd = df_val_clase_binaria.to_pandas()
+      weight_val_pd = df_val_weight.to_pandas()
+      logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
+      val_data = lgb.Dataset(
+          opt_X_val_pd,
+          label=opt_y_val_pd,
+          weight=weight_val_pd.to_numpy()
+      )
 
       modelos[s] = lgb.train(
         params,
