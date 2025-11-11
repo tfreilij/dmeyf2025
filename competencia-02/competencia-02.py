@@ -32,8 +32,8 @@ def ganancia_prob(y_pred, y_true, threshold,prop = 1):
   return ganancia[y_pred >= threshold].sum() / prop
 
 
-def binarize_predictions(y_pred):
-    return np.where(y_pred >= THRESHOLD, 1, 0)
+def binarize_predictions(y_pred,threshold):
+    return np.where(y_pred >= threshold, 1, 0)
 
 
 def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
