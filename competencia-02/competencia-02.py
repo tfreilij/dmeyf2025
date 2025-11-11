@@ -68,7 +68,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     logger.info("Ganancia evaluator")
     logger.info(f"Y_true : {y_true}")
     logger.info(f"Y_pred : {y_pred}")
-    y_true = y_true["clase_binaria"]
+    y_true = y_true
 
     # Convertir a DataFrame de Polars para procesamiento eficiente
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
