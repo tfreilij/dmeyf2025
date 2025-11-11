@@ -40,7 +40,7 @@ def deltas_columns(df : pl.DataFrame):
 
 
     col_drops = [
-          "numero_de_cliente", "foto_mes", "active_quarter",
+          "clase_ternaria","numero_de_cliente", "foto_mes", "active_quarter",
           "cliente_antiguedad", 
           "Visa_Fvencimiento", "Master_Fvencimiento", "Master_Finiciomora",
           "cliente_vip", "internet", "cliente_edad", "mrentabilidad_annual"
