@@ -73,10 +73,9 @@ def ganancia_prob(y_pred, y_true, threshold,prop = 1):
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
-  logger.info(f"Build predictions")
+  logger.info(f"Build predictions for {SEMILLA}")
   for seed,model in modelos.items():
     if seed in SEMILLA:
-      logger.info(f"Semilla: {seed}")
       predictions = model.predict(dataset)
       predicciones[seed] = predictions
 
@@ -131,8 +130,8 @@ def ganancia_evaluator(y_pred, y_true) -> float:
   ganancia_maxima_valor = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
   envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada') == ganancia_maxima_valor).head(1)
 
-  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada').item(0)
-  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado').item(0)
+  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada').to_series()[0]
+  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado').to_series()[0]
   logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
   return ganancia_maxima, cantidad_envios
 
