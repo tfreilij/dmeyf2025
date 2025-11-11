@@ -111,32 +111,33 @@ def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
 
 def ganancia_evaluator(y_pred, y_true) -> float:
 
-    logger.info("Ganancia evaluator")
-    logger.info(f"Y_true : {y_true}")
-    logger.info(f"Y_pred : {y_pred}")
-    y_true = y_true
+  logger.info("Ganancia evaluator")
+  logger.info(f"Y_true : {y_true}")
+  logger.info(f"Y_pred : {y_pred}")
+  y_true = y_true
 
-    df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
-    df_ordenado = df_eval.sort('y_pred_proba', descending=True)
-    df_ordenado = df_ordenado.with_columns([
-        pl.when(pl.col('y_true') == 1)
-          .then(GANANCIA_ACIERTO)
-          .otherwise(-COSTO_ESTIMULO)
-          .alias('ganancia_individual'), pl.lit(1).alias('indice')
-    ])
-    
-    df_ordenado = df_ordenado.with_columns([
-        pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada'),
-        pl.col('indice').cum_sum().alias('indice_acumulado')
-    ])
-    
-    #ganancia_maxima = df_ordenado.select([pl.col('ganancia_acumulada').max(),pl.col('indice_acumulado')]).to_series()
-    envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada').max()).head(0)
+  df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
+  df_ordenado = df_eval.sort('y_pred_proba', descending=True)
+  df_ordenado = df_ordenado.with_columns([
+      pl.when(pl.col('y_true') == 1)
+        .then(GANANCIA_ACIERTO)
+        .otherwise(-COSTO_ESTIMULO)
+        .alias('ganancia_individual'), pl.lit(1).alias('indice')
+  ])
+  
+  df_ordenado = df_ordenado.with_columns([
+      pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada'),
+      pl.col('indice').cum_sum().alias('indice_acumulado')
+  ])
+  
 
-    ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada')
-    cantidad_envios = envios_ganancia_maxima.select('indice_acumulado')
-    logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
-    return ganancia_maxima, cantidad_envios
+  ganancia_maxima_valor = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
+  envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada') == ganancia_maxima_valor).head(1)
+
+  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada')
+  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado')
+  logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
+  return ganancia_maxima, cantidad_envios
 
 def generate_clase_peso(df : pl.DataFrame):
 
