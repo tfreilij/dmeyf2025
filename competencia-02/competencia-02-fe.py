@@ -59,32 +59,24 @@ def deltas_columns(df : pl.DataFrame):
 
 def generate_deltas(df : pl.DataFrame):
 
-    all_cols = deltas_columns(df)
+    expressions = []
 
-    for c in all_cols:
-        df = df.with_columns(pl.col(c).alias(f"delta_1_{c}").cast(pl.Float64))
-        df = df.with_columns(pl.col(c).alias(f"delta_2_{c}").cast(pl.Float64))
-        df = df.with_columns(pl.col(c).alias(f"sum_delta_{c}").cast(pl.Float64))
+    for c in deltas_columns(df):
+        expressions.append(
+            pl.col(c).shift(-1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
+        )
+        expressions.append(
+            pl.col(c).shift(-2).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64)
+        )
 
+        expressions.append(
+            (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64)
+        )
+        expressions.append(
+            (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64)
+        )
 
-    delta_cols = [f"delta_1_{c}" for c in all_cols ] + \
-             [f"delta_2_{c}" for c in all_cols ] + \
-             [f"sum_delta_{c}" for c in all_cols ]
-    query_deltas_pl = []
-    #for c in col_pesos["campo"].to_list():
-    for c in delta_cols:
-        logger.info(f"Deltas for column {c}")
-        delta_1 = (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_1_{c}")
-        delta_2 = (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).cast(pl.Float64).alias(f"delta_2_{c}")
-        sum_delta_2 = ((pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")) + (pl.col(c).shift(1).over("numero_de_cliente") - pl.col(c).shift(2).over("numero_de_cliente"))).cast(pl.Float64).alias(f"sum_delta_{c}")
-
-        query_deltas_pl.append(delta_1)
-        query_deltas_pl.append(delta_2)
-        query_deltas_pl.append(sum_delta_2)
-
-    df = df.with_columns(query_deltas_pl)
-
-    return df
+    return df.with_columns(expressions)
        
 def run_feature_engineering():
     """Run feature engineering with DuckDB using config file"""
@@ -95,7 +87,7 @@ def run_feature_engineering():
     
     logger.info(f"Reading dataset from {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE"))}")
     df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
-    df = df.sort(by=["numero_de_cliente", "foto_mes"])
+    df = df.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, True])
     logger.info(f"After filtering: {df.shape} rows")
     logger.info("Generating deltas")
     df = generate_deltas(df)
