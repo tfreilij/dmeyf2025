@@ -6,21 +6,21 @@ from load_config import Config
 from pathlib import Path
 import datetime
 
-
-
 logger = logging.getLogger(__name__)
 
-
 config = Config()
+BUCKETS = config["BUCKETS"]
+BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
+BUCKET_TARGET = config["BUCKET_TARGET"]
 
-BUCKET = config["BUCKET"]
-
-os.makedirs(f"{BUCKET}/log", exist_ok=True)
+file_origin = os.path.join(BUCKETS,BUCKET_ORIGIN, "competencia_02.csv")
+file_target = os.path.join(BUCKETS,BUCKET_TARGET, "competencia_02_fe.csv")
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_fe_{fecha}.log"
+log_path =os.path.join(BUCKETS,BUCKET_TARGET,"log", nombre_log)
+os.makedirs(log_path, exist_ok=True)
 
-log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
@@ -29,7 +29,6 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
 
 def filter_foto_mes_range(df : pl.DataFrame, start_mes : int, end_mes : int):
     df = df.filter(~( (pl.col("foto_mes") >= start_mes) & (pl.col("foto_mes") <= end_mes)))
@@ -88,22 +87,19 @@ def generate_deltas(df : pl.DataFrame):
 
     return df.with_columns(expressions)
        
-def run_feature_engineering():
-    """Run feature engineering with DuckDB using config file"""
-      
+def run_feature_engineering():   
     if not config:
         logger.error("Failed to load configuration")
         return
     
-    logger.info(f"Reading dataset from {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE"))}")
-    df = pl.read_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_TERNARIA_FILE")))
+    logger.info(f"Reading dataset {file_origin}")
+    df = pl.read_csv(file_origin)
     df = df.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, True])
-    logger.info(f"After filtering: {df.shape} rows")
     logger.info("Generating deltas")
     df = generate_deltas(df)
     logger.info("Writing dataset")
-    df.write_csv(os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE")))
-    logger.info(f"Dataset written to {os.path.join(config.__getitem__("BUCKET"),config.__getitem__("DATASET_FE_FILE"))}")
+    df.write_csv(file_target)
+    logger.info(f"Dataset written to {file_target}")
 
 if __name__ == "__main__":
     run_feature_engineering()

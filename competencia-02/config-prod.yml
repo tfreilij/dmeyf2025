@@ -1,5 +1,5 @@
 STUDY_NAME: "competencia-02-study-1-0"
-BUCKETS: "/home/tomas_freilij/buckets/"
+BUCKETS: "/home/tomas_freilij/buckets"
 BUCKET_ORIGIN: "b1"
 BUCKET_TARGET: "b1"
 DATASETS_PATH: "/home/tomas_freilij/datasets/"
