@@ -6,12 +6,12 @@ from load_config import Config
 
 
 config = Config()
-BUCKET = config["BUCKET"]
-DATASET_CRUDO_FILE = config["DATASET_CRUDO_FILE"]
-DATASET_TERNARIA_FILE = config["DATASET_TERNARIA_FILE"]
+BUCKETS = config["BUCKETS"]
+BUCKET_TARGET = config["BUCKET_TARGET"]
 DATASETS_PATH = config["DATASETS_PATH"]
 
-df_crudo = pl.read_csv(os.path.join(DATASETS_PATH,DATASET_CRUDO_FILE), infer_schema_length=None)
+dataset_crudo_file = "competencia_02_crudo.csv.gz"
+df_crudo = pl.read_csv(os.path.join(DATASETS_PATH,dataset_crudo_file), infer_schema_length=None)
 
 df_ternaria = df_crudo.with_columns(
     pl.col("foto_mes").shift(-1).over("numero_de_cliente").alias("next_month_foto_mes"),
@@ -30,5 +30,4 @@ df_ternaria = df_crudo.with_columns(
     .alias("clase_ternaria")
 ).drop(["next_month_foto_mes", "next_two_months_foto_mes", "has_next_month", "has_next_two_months"])
 
-
-df_ternaria.write_csv(os.path.join(BUCKET,DATASET_TERNARIA_FILE))
+df_ternaria.write_csv(os.path.join(BUCKETS,BUCKET_TARGET,"competencia_02.csv"))
