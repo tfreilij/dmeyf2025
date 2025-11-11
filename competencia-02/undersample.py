@@ -10,20 +10,21 @@ from load_config import Config
 logger = logging.getLogger(__name__)
 
 config = Config()
-BUCKET = config["BUCKET"]
-RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
-UNDERSAMPLING_FRACTION = config["UNDERSAMPLING_FRACTION"]
-DATASET_FE_FILE = config["DATASET_FE_FILE"]
-DATASET_UNDERSAMPLED_FILE =  config["DATASET_UNDERSAMPLED_FILE"]
+BUCKETS = config["BUCKETS"]
+BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
+BUCKET_TARGET = config["BUCKET_TARGET"]
 MES_TRAIN = config["MES_TRAIN"]
+UNDERSAMPLED_DATASET = config["UNDERSAMPLED_DATASET"]
+UNDERSAMPLING_FRACTION = config["UNDERSAMPLING_FRACTION"]
 
-train_test_models = config["TRAIN_TEST_MODELS"]
-
-os.makedirs(f"{BUCKET}/log", exist_ok=True)
+file_origin = os.path.join(BUCKETS,BUCKET_ORIGIN, "competencia_02_fe.csv")
+file_target = os.path.join(BUCKETS,BUCKET_TARGET, UNDERSAMPLED_DATASET)
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_undersample_{fecha}.log"
-log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
+log_path =os.path.join(BUCKETS,BUCKET_TARGET,"log", nombre_log)
+os.makedirs(os.path.join(BUCKETS,BUCKET_TARGET,"log"), exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
@@ -32,7 +33,6 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
 def generate_clase_binaria(df : pl.DataFrame):
 
     df = df.with_columns(pl.lit(0).alias('clase_binaria'))
@@ -47,7 +47,7 @@ def generate_clase_binaria(df : pl.DataFrame):
 logger.info(f"Config : {config}")
 
 logger.info("Read DataFrame")
-df = pl.read_csv(os.path.join(BUCKET,DATASET_FE_FILE))
+df = pl.read_csv(file_origin)
 
 df = df.filter(pl.col("foto_mes").is_in(MES_TRAIN))
 
@@ -63,5 +63,5 @@ df = df.filter(~pl.col('numero_de_cliente').is_in(clientes_solo_continuas_unders
 logger.info(f"DF shape after undersampling: {df.shape}")
 
 logger.info("Writing dataset")
-df.write_csv(os.path.join(config.__getitem__("BUCKET"),DATASET_UNDERSAMPLED_FILE))
-logger.info(f"Dataset written to {os.path.join(config.__getitem__("BUCKET"),DATASET_UNDERSAMPLED_FILE)}")
+df.write_csv(file_target)
+logger.info(f"Dataset written to {file_target}")
