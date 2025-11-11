@@ -353,7 +353,7 @@ def objective(trial) -> float:
     
     optimization_predictions = build_predictions(clientes_val, modelos, df_val)
     ganancia_total,_ = ganancia_evaluator(optimization_predictions,df_val_clase_binaria)
-    logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total:,.0f}")
+    logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
     return ganancia_total
 
 storage_name = f"sqlite:////{os.path.join(BUCKETS, BUCKET_TARGET,STUDY_NAME)}.db"
