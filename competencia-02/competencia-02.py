@@ -262,6 +262,8 @@ df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
 
+logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_clase_binaria.shape} , {df_val_weight.shape}")
+logger.info(f"Opt Train Data : {len(df_train.columns)} , {df_train_clase_binaria_baja.shape} , {df_train_weight.shape}")
 # FUNCION OBJETIVO PARA OPTUNA
 def objective(trial) -> float:
 
@@ -306,7 +308,7 @@ def objective(trial) -> float:
       opt_X_val_pd = df_val.to_pandas()
       opt_y_val_pd = df_val_clase_binaria.to_pandas()
       weight_val_pd = df_val_weight.to_pandas()
-      logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
+
       val_data = lgb.Dataset(
           opt_X_val_pd,
           label=opt_y_val_pd,
