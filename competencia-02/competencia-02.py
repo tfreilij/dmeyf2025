@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def drop_columns(df : pl.DataFrame):
     logger.info("Dropping columns")
 
-    col_drops = ["Visa_Finiciomora","numero_de_cliente", 'tmobile_app', "active_quarter", "clase_ternaria",
+    col_drops = ["Visa_Finiciomora","active_quarter", "clase_ternaria",
           "cliente_edad", "cliente_antiguedad",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
           "Visa_Fvencimiento", "Master_Fvencimiento"
