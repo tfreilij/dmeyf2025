@@ -88,6 +88,18 @@ def build_predictions(clientes, modelos, dataset):
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': mean_predictions})
 
 
+def build_final_predictions(clientes_predict, predict_models, df_predict, n_envios):
+  mean_predictions = build_predictions(clientes_predict, predict_models, df_predict)
+  sorted_mean_predictions = mean_predictions.sort('Predicted', descending=True)
+  final_predictions = sorted_mean_predictions.with_columns(
+        (pl.arange(0, sorted_mean_predictions.height) < n_envios)
+        .cast(pl.Int8)
+        .alias("Prediction")
+    )
+    
+  return final_predictions.select(["numero_de_cliente", "Prediction"])
+
+
 def aplicar_undersampling(df: pl.DataFrame, fraction) -> pl.DataFrame:
     logger.info(f"Undersampling Continuas with fraction : {fraction} , DF shape : {df.shape}")
     
@@ -211,7 +223,7 @@ def build_and_save_models(semillas : list, train_dataset : pl.DataFrame, y_targe
 
 debug = False
 submit = True
-train_test_models = config["TRAIN_TEST_MODELS"]
+
 
 logger.info(f"Config : {config}")
 
@@ -357,6 +369,7 @@ if RUN_BAYESIAN_OPTIMIZATION:
   logger.info("Run Optimization")
   study.optimize(lambda trial: objective(trial), n_trials=50)
 
+train_test_models = config["TRAIN_TEST_MODELS"]
 test_models = {}
 for seed in SEMILLA:
   logger.info(f"Build or Load Test model for seed : {seed}")
@@ -393,7 +406,7 @@ if train_predict_models:
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_val_clase_binaria)
 
-comp_predictions = build_predictions(clientes_predict, predict_models, df_predict)
+comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
 
 if submit:
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions_{SUBMISSION_NUMBER}.csv")
