@@ -15,13 +15,20 @@ config = Config()
 
 BUCKET = config["BUCKET"]
 
-os.makedirs(f"{BUCKET}/logs", exist_ok=True)
+os.makedirs(f"{BUCKET}/log", exist_ok=True)
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_fe_{fecha}.log"
 
-log_path =os.path.join(f"{BUCKET}/logs/", nombre_log)
-
+log_path =os.path.join(f"{BUCKET}/log/", nombre_log)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s %(lineno)d - %(message)s',
+    handlers=[
+        logging.FileHandler(log_path, mode="w", encoding="utf-8-sig"),
+        logging.StreamHandler()
+    ]
+)
 
 
 def filter_foto_mes_range(df : pl.DataFrame, start_mes : int, end_mes : int):
