@@ -46,6 +46,9 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
       predictions = model.predict(dataset)
       predicciones[seed] = predictions
       if y_true is not None:
+        logger.info(f"PREDICTIONS : {predictions}")
+        logger.info(f"Y_TRUE : {y_true}")
+        logger.info(f"THRESHOLD : {threshold}")
         logger.info(f"Ganancias de Modelo con semilla {seed}:", ganancia_prob(predictions, y_true,threshold))
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
