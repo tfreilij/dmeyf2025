@@ -406,6 +406,7 @@ if train_predict_models:
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_val_clase_binaria)
+logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios")
 
 comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
 
