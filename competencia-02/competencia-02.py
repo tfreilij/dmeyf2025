@@ -286,7 +286,7 @@ df_test = df_test.drop(['clase_binaria','clase_peso'])
 df_predict = df_predict.drop(['clase_binaria','clase_peso'])
 
 
-cols_to_cast = [c for c, dtype in zip(X.columns, X.dtypes) if dtype == pl.Utf8]
+cols_to_cast = [c for c, dtype in zip(df_train.columns, df_train.dtypes) if dtype == pl.Utf8]
 
 train_dataset = df_train.with_columns([
   pl.col(c).cast(pl.Float64, strict=False) for c in cols_to_cast
