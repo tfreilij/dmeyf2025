@@ -266,7 +266,7 @@ df_train_clase_binaria_baja = df_train['clase_binaria']
 df_test_clase_binaria_baja = df_test['clase_binaria']
 df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
 df_val_clase_binaria = df_val['clase_binaria']
-
+logger.info(f"DF_VAL clase binaria : {df_val_clase_binaria.shape}")
 
 df_train_predict_weight = df_train_predict['clase_peso']
 df_val_weight = df_val['clase_peso']
@@ -346,7 +346,7 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     
     max_prediction = 0
     for threshold in [0.05,0.075,0.1,0.125,0.15,0.175]:
-      optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_test_clase_binaria_baja)
+      optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_val_clase_binaria)
       if optimization_predictions > max_prediction:
         max_prediction = optimization_predictions
   
