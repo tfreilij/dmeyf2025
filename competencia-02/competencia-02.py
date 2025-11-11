@@ -232,6 +232,7 @@ clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_client
 clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
 
 df = generate_clase_peso(df)
+df = generate_clase_binaria(df)
 
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
