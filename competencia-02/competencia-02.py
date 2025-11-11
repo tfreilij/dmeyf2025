@@ -85,7 +85,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     # Encontrar la ganancia máxima
     ganancia_maxima = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
   
-    return 'ganancia', ganancia_maxima, True
+    return ganancia_maxima
 
 
 def generate_clase_peso(df : pl.DataFrame):
