@@ -49,7 +49,7 @@ def build_predictions(clientes, modelos, dataset, threshold,y_true=None):
         logger.info(f"Ganancias de Modelo con semilla {seed}: {ganancia_prob(predictions, y_true,threshold)}")
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
-  return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': binarize_predictions(mean_predictions,threshold)})
+  return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': mean_predictions})
 
 
 
@@ -71,7 +71,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     y_true = y_true["clase_binaria"]
 
     # Convertir a DataFrame de Polars para procesamiento eficiente
-    df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred})
+    df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
   
     # Ordenar por probabilidad descendente
     df_ordenado = df_eval.sort('y_pred_proba', descending=True)
@@ -349,10 +349,10 @@ def objective(trial, X : pl.DataFrame, y : pl.DataFrame , weight : pl.DataFrame)
     max_prediction = 0
     for threshold in [0.05,0.075,0.1,0.125,0.15,0.175]:
       optimization_predictions = build_predictions(clientes_val, modelos, df_val, threshold=threshold, y_true=df_val_clase_binaria)
-      if ganancia_evaluator(optimization_predictions, df_val) > max_prediction:
+      if ganancia_evaluator(optimization_predictions,df_val_clase_binaria) > max_prediction:
         max_prediction = optimization_predictions
   
-    _, ganancia_total, _ = ganancia_evaluator(max_prediction, df_val)
+    _, ganancia_total, _ = ganancia_evaluator(max_prediction,df_val_clase_binaria)
 
     logger.info(f"Trial {trial.number}: Ganancia = {ganancia_total:,.0f}")
   
