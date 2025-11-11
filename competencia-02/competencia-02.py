@@ -58,7 +58,7 @@ logging.basicConfig(
 def drop_columns(df : pl.DataFrame):
     logger.info("Drop columns")
 
-    col_drops = ["clase_ternaria","Visa_Finiciomora","Visa_Finiciomora",
+    col_drops = ["Visa_Finiciomora","Visa_Finiciomora",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
           "Visa_Fvencimiento", "Master_Fvencimiento"
       ]
@@ -254,10 +254,13 @@ df_train_weight = df_train['clase_peso']
 
 logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
 
-df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes'])
+df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes'])
-df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes'])
-df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes'])
+if SUBMIT:
+  df_train_predict = df_train_predict.drop(["clase_ternaria"])
+  
+df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
 
 # FUNCION OBJETIVO PARA OPTUNA
