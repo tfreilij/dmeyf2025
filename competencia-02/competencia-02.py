@@ -294,25 +294,6 @@ train_dataset = df_train.with_columns([
 ])
 
 
-opt_train_pd = train_dataset.to_pandas()
-opt_y_pd = df_train_clase_binaria_baja.to_pandas()
-opt_weight_pd = df_train_weight.to_pandas()
-
-logger.info(f"Opt Train Data : {len(opt_train_pd.columns)} , {opt_y_pd.shape} , {opt_weight_pd.shape}")
-train_data = lgb.Dataset(opt_train_pd,
-                            label=opt_y_pd,
-                            weight=opt_weight_pd.to_numpy())
-
-opt_X_val_pd = df_val.to_pandas()
-opt_y_val_pd = df_val_clase_binaria.to_pandas()
-weight_val_pd = df_val_weight.to_pandas()
-logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
-val_data = lgb.Dataset(
-      opt_X_val_pd,
-      label=opt_y_val_pd,
-      weight=weight_val_pd.to_numpy()
-  )
-
 def objective(trial) -> float:
 
     logger.info(f"Begin Trial {trial.number}")
@@ -323,6 +304,25 @@ def objective(trial) -> float:
     feature_fraction = trial.suggest_float('feature_fraction', 0.1, 1.0)
     max_bin = trial.suggest_int('max_bin', 255, 500)
     num_iterations = trial.suggest_int('num_iterations', 100, 500)
+
+    opt_train_pd = train_dataset.to_pandas()
+    opt_y_pd = df_train_clase_binaria_baja.to_pandas()
+    opt_weight_pd = df_train_weight.to_pandas()
+
+    logger.info(f"Opt Train Data : {len(opt_train_pd.columns)} , {opt_y_pd.shape} , {opt_weight_pd.shape}")
+    train_data = lgb.Dataset(opt_train_pd,
+                                label=opt_y_pd,
+                                weight=opt_weight_pd.to_numpy())
+
+    opt_X_val_pd = df_val.to_pandas()
+    opt_y_val_pd = df_val_clase_binaria.to_pandas()
+    weight_val_pd = df_val_weight.to_pandas()
+    logger.info(f"Opt Val Data : {len(opt_X_val_pd.columns)} , {opt_y_val_pd.shape} , {weight_val_pd.shape}")
+    val_data = lgb.Dataset(
+          opt_X_val_pd,
+          label=opt_y_val_pd,
+          weight=weight_val_pd.to_numpy()
+      )
 
     modelos = {}
     for s in SEMILLA:
