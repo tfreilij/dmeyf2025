@@ -69,7 +69,8 @@ def generate_deltas(df : pl.DataFrame):
     expressions = []
     all_cols = deltas_columns(df)
 
-    for c in all_cols:
+    numeric_cols = [col for col in all_cols if df[col].dtype != pl.String]
+    for c in numeric_cols:
         logger.info(f"Delta for column {c}")
         expressions.append(
             pl.col(c).shift(-1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
