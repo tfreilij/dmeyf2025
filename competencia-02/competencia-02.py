@@ -60,10 +60,9 @@ def drop_columns(df : pl.DataFrame):
 
     col_drops = ["Visa_Finiciomora","Visa_Finiciomora",
           "Visa_fultimo_cierre", "Master_fultimo_cierre",
-          "Visa_Fvencimiento", "Master_Fvencimiento"
+          "Visa_Fvencimiento", "Master_Fvencimiento",'tmobile_app','mprestamos_personales'
       ]
 
-    df = df.drop(['numero_de_cliente','tmobile_app','mprestamos_personales'])
     df = df.drop(col_drops)
     return df
 
@@ -215,7 +214,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
 
 logger.info(f"Config : {config}")
 
-logger.info(f"Read Undersampled DataFrame : {os.path.join(BUCKETS,BUCKET_ORIGIN,"competencia_02_fe.csv")}")
+logger.info(f"Read DataFrame : {os.path.join(BUCKETS,BUCKET_ORIGIN,"competencia_02_fe.csv")}")
 df = pl.read_csv(os.path.join(BUCKETS,BUCKET_ORIGIN,"competencia_02_fe.csv"))
 logger.info(f"Dataframe size : {df.shape}")
 
@@ -233,11 +232,10 @@ clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cli
 
 df = generate_clase_peso(df)
 df = generate_clase_binaria(df)
+df = drop_columns(df)
 
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
 df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
-
-df = drop_columns(df)
 
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
