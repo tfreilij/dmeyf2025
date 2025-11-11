@@ -131,8 +131,8 @@ def ganancia_evaluator(y_pred, y_true) -> float:
   ganancia_maxima_valor = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
   envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada') == ganancia_maxima_valor).head(1)
 
-  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada')
-  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado')
+  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada').item(0)
+  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado').item(0)
   logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
   return ganancia_maxima, cantidad_envios
 
