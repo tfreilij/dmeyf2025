@@ -288,7 +288,7 @@ def objective(trial) -> float:
     for s in SEMILLA:
       params = {
         'objective': 'binary',
-        'metric': 'auc',
+        'metric': None,
         'boosting_type': 'rf',
         'first_metric_only': True,
         'boost_from_average': True,
@@ -318,7 +318,7 @@ def objective(trial) -> float:
         params,
         train_data,
         valid_sets=[val_data],
-        callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
+        callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
       )
     
     optimization_predictions = build_predictions(clientes_val, modelos, df_val)
