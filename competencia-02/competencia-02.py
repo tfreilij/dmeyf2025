@@ -183,7 +183,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
 
     params = {
             'objective': 'binary',
-              'metric': 'auc',
+              'metric': None,
               'boosting_type': 'rf',
               'first_metric_only': True,
               'boost_from_average': True,
