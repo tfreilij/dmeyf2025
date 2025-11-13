@@ -356,7 +356,7 @@ study = optuna.create_study(
 
 # HAY UN FLAG EN EL CONFIG PARA EVITAR CORRER LA OPTIMIZACION SIEMPRE
 if RUN_BAYESIAN_OPTIMIZATION:
-  logger.info("Run Optimization")
+  logger.info(f"Run Optimization with {N_TRIALS}")
   study.optimize(lambda trial: objective(trial), n_trials=N_TRIALS)
 
 
