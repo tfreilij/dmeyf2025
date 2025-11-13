@@ -85,8 +85,10 @@ def build_predictions(clientes, modelos, dataset):
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': mean_predictions})
 
 ## FUNCION AUXILIAR QUE ARMO PARA TENER UNA MINIMA COMPARACION CON LO "ESPERADO"
-def ganancia_optima_idealizada(df :pl.DataFrame) -> float:
-  df_ganancias = df.with_columns(
+def ganancia_optima_idealizada(df :pl.DataFrame, ternaria : pl.Series) -> float:
+
+  df_ganancias = df.hstack(ternaria.to_frame())
+  df_ganancias = df_ganancias.with_columns(
       pl.when(pl.col('clase_ternaria').is_in(["BAJA+2"]))
         .then(780000)
         .alias('ganancia_individual')
@@ -408,14 +410,14 @@ logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
-logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test.hstack(df_test_ternaria))}")
+logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
 df_predict = df_predict.drop(['foto_mes'])
   
 if not SUBMIT:
-  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict.hstack(df_predict_ternaria))}")
+  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_ternaria)}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
   comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
