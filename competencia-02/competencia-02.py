@@ -160,7 +160,7 @@ def generate_clase_binaria(df : pl.DataFrame):
     df = df.with_columns(pl.lit(0).alias('clase_binaria'))
 
     df = df.with_columns(
-        pl.when(pl.col('clase_ternaria').is_in(['BAJA+2','BAJA+1'])).then(pl.lit(1)).otherwise(pl.lit(0)).alias('clase_binaria')
+        pl.when(pl.col('clase_ternaria').is_in(['BAJA+2'])).then(pl.lit(1)).otherwise(pl.lit(0)).alias('clase_binaria')
     )
 
     return df
