@@ -401,7 +401,7 @@ if train_predict_models:
   predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 logger.info("Feature Importance")
-logger.info(lgb.plot_importance(predict_models[0], figsize=(30, 40)))
+logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
