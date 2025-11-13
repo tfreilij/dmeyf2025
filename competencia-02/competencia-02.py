@@ -122,14 +122,35 @@ def undersample_df(df: pl.DataFrame, fraction) -> pl.DataFrame:
   return df
 
 ## SE ORDENAN DE MAYOR A MENOR LAS PROBABILIDADES Y SE BUSCA LA MAXIMA GANANCIA JUNTO A LA CANTIDAD DE ENVIOS CORRESPONDIENTES
-def ganancia_evaluator(y_pred, y_true) -> float:
-
-  logger.info("Ganancia evaluator")
-  logger.info(f"Y_true : {y_true}")
-  logger.info(f"Y_pred : {y_pred}")
-  y_true = y_true
-
-  df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
+def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
+  """
+  Calcula la ganancia máxima ordenando predicciones.
+  
+  Args:
+    y_pred: DataFrame con columnas 'numero_de_cliente' y 'Predicted'
+    y_true: Series con los valores verdaderos, o DataFrame con 'numero_de_cliente' y 'clase_binaria'
+    df_true: DataFrame original con 'numero_de_cliente' y 'clase_binaria' (opcional, para alineación)
+  """
+  
+  # Si y_true es un Series y tenemos df_true, extraer y alinear por numero_de_cliente
+  if df_true is not None and 'numero_de_cliente' in df_true.columns and 'clase_binaria' in df_true.columns:
+    # Crear DataFrame con numero_de_cliente y clase_binaria desde df_true
+    y_true_df = df_true.select(['numero_de_cliente', 'clase_binaria']).rename({'clase_binaria': 'y_true'})
+    # Hacer join para alinear por numero_de_cliente
+    df_eval = y_pred.join(y_true_df, on='numero_de_cliente', how='inner')
+    logger.info(f"Ganancia evaluator - Alineados {df_eval.height} registros por numero_de_cliente")
+  elif isinstance(y_true, pl.DataFrame) and 'numero_de_cliente' in y_true.columns:
+    # Si y_true ya es un DataFrame con numero_de_cliente, hacer join
+    y_true_df = y_true.select(['numero_de_cliente', y_true.columns[-1]]).rename({y_true.columns[-1]: 'y_true'})
+    df_eval = y_pred.join(y_true_df, on='numero_de_cliente', how='inner')
+    logger.info(f"Ganancia evaluator - Alineados {df_eval.height} registros por numero_de_cliente")
+  else:
+    # Comportamiento original: asumir mismo orden (puede ser incorrecto)
+    logger.warning("Ganancia evaluator - Usando alineación por índice (puede ser incorrecto si los órdenes no coinciden)")
+    df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
+  
+  logger.info(f"Ganancia evaluator Y_true : {df_eval['y_true'].sum()} and Y_pred : {df_eval['y_pred_proba'].sum()}")
+  
   df_ordenado = df_eval.sort('y_pred_proba', descending=True)
   df_ordenado = df_ordenado.with_columns([
       pl.when(pl.col('y_true') == 1)
@@ -265,6 +286,10 @@ df_test_clase_binaria_baja = df_test['clase_binaria']
 df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
 df_val_clase_binaria = df_val['clase_binaria']
 
+# Crear DataFrames de alineación con numero_de_cliente y clase_binaria antes de cualquier drop
+df_val_with_target = df_val.select(['numero_de_cliente', 'clase_binaria'])
+df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria'])
+
 df_train_predict_weight = df_train_predict['clase_peso']
 df_val_weight = df_val['clase_peso']
 df_train_weight = df_train['clase_peso']
@@ -344,7 +369,8 @@ def objective(trial) -> float:
       )
     
     optimization_predictions = build_predictions(clientes_val, modelos, df_val)
-    ganancia_total,_ = ganancia_evaluator(optimization_predictions,df_val_clase_binaria)
+    # Usar DataFrame de alineación pre-construido para asegurar mismo orden
+    ganancia_total,_ = ganancia_evaluator(optimization_predictions, df_val_clase_binaria, df_true=df_val_with_target)
     logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
     return ganancia_total
 
@@ -410,7 +436,8 @@ logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
-ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
+# Usar DataFrame de alineación pre-construido para asegurar mismo orden
+ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_clase_binaria_baja, df_true=df_test_with_target)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
@@ -422,9 +449,11 @@ if IS_EXPERIMENTO:
     df_predict = df_predict.drop(["clase_ternaria"])
   logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_ternaria)}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
+  # Reconstruir DataFrame con numero_de_cliente y clase_binaria para alinear correctamente
+  df_predict_with_target = df_predict.select(['numero_de_cliente']).with_columns(df_predict_clase_binaria.alias('clase_binaria'))
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
   comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
-  ganancia, n_envios = ganancia_evaluator(comp_predictions,df_predict_clase_binaria)
+  ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_clase_binaria, df_true=df_predict_with_target)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
