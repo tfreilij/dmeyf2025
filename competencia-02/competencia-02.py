@@ -29,6 +29,7 @@ SEMILLA = config["SEMILLA"]
 SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
 UNDERSAMPLE_FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
+N_TRIALS = config["N_TRIALS"]
 
 submission_number = 1
 
@@ -340,7 +341,7 @@ study = optuna.create_study(
 # HAY UN FLAG EN EL CONFIG PARA EVITAR CORRER LA OPTIMIZACION SIEMPRE
 if RUN_BAYESIAN_OPTIMIZATION:
   logger.info("Run Optimization")
-  study.optimize(lambda trial: objective(trial), n_trials=50)
+  study.optimize(lambda trial: objective(trial), n_trials=N_TRIALS)
 
 
 # QUIZAS NO SE QUIERE HACER TODA LA PRUEBA CON TEST ASI QUE SE HABILITA LA POSIBILIDAD DE SALTEAR ESTA PARTE
