@@ -26,10 +26,15 @@ FINAL_PREDICT = config["FINAL_PREDICT"]
 MES_TEST = config["MES_TEST"]
 FINAL_TRAIN = config["FINAL_TRAIN"]
 SEMILLA = config["SEMILLA"]
-SUBMISSION_NUMBER = config["SUBMISSION_NUMBER"]
 UNDERSAMPLE_FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 N_TRIALS = config["N_TRIALS"]
+
+if BUCKET_ORIGIN == BUCKET_TARGET:
+  raise RuntimeError("Bucket de Origen y Bucket de Destino no pueden ser iguales")
+
+if BUCKET_TARGET == "b1":
+  raise RuntimeError("Bucket Target no puede ser b1")
 
 submission_number = 1
 
@@ -349,10 +354,10 @@ test_models = {}
 if train_test_models:
   for seed in SEMILLA:
     logger.info(f"Build or Load Test model for seed : {seed}")
-    model_name = f"lgb_test_{seed}_{SUBMISSION_NUMBER}.txt"
+    model_name = f"lgb_test_{seed}.txt"
     model_file_path = os.path.join(modelos_directory,model_name)
     if os.path.exists(model_file_path):
-      logger.info(f"Cargamos el modelo de Test de la submission {SUBMISSION_NUMBER} para la semilla {seed}")
+      logger.info(f"Cargamos el modelo de Test para la semilla {seed}")
       booster = lgb.Booster(model_file=model_file_path)
       test_models[seed] = booster
       # SI NO SE ENCONTRO AL MENOS UNO DE LOS MODELOS ENTONCES HAY QUE ENTRENAR 
@@ -368,7 +373,7 @@ train_predict_models = True
 
 predict_models = {}
 for seed in SEMILLA:
-  model_name = f"lgb_predict_{seed}_{SUBMISSION_NUMBER}.txt"
+  model_name = f"lgb_predict_{seed}.txt"
   model_file_path = os.path.join(modelos_directory,model_name)
   if os.path.exists(model_file_path):
     logger.info(f"Load Predict model for seed {seed}")
