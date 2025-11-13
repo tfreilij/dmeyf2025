@@ -168,7 +168,10 @@ def generate_clase_binaria(df : pl.DataFrame):
     return df
 
 ## SE ARMA EL MODELO Y DE SER POSIBLE SE PERSISTE PARA PODER USARLO PARA OTRA PREDICCIÓN.
-def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test, run_bayesian_optimization) -> list:
+def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test, undersampling_fraction) -> list:
+
+  if undersampling_fraction == None or is_test == None:
+    raise RuntimeError(f"Undersampling Fraction {undersampling_fraction} o Is Test {is_test} parameters no pueden ser None")
 
   train_dataset_pd = train_dataset.to_pandas()
   y_target_pd = y_target.to_pandas()
@@ -180,6 +183,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
 
   modelos = {}
 
+  
   for seed in semillas:
     logger.info(f"Construimos el modelo para la semilla : {seed}")
 
@@ -196,6 +200,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
         }
 
     new_params = study.best_trial.params
+    new_params["min_data_in_leaf"] = new_params["min_data_in_leaf"] * 100 / undersampling_fraction
     
     params.update(new_params)
     model = lgb.train(params,train_data)
@@ -254,7 +259,7 @@ logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
 
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes'])
-if SUBMIT:
+if not SUBMIT:
   df_train_predict = df_train_predict.drop(["clase_ternaria"])
   
 df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
@@ -362,7 +367,8 @@ if train_test_models:
       logger.info(f"El modelo de Test para la semilla {seed} no existe en {model_file_path}. Se entrenará.")
 
 if train_test_models:
-  test_models = build_and_save_models(study, SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
+  logger.info(f"Train models {df_train_predict.shape} ")
+  test_models = build_and_save_models(study, SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True,undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 # SIMILAR A PREDICCIÓN. EN ESTE CASO SE VA A HACER SIEMPRE
 train_predict_models = True
@@ -380,10 +386,11 @@ for seed in SEMILLA:
     logger.info(f"Predict model for seed {seed} does not exist. Will be trained.")
 
 if train_predict_models:
-  predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
+  predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 logger.info("Feature Importance")
 logger.info(lgb.plot_importance(predict_models[0], figsize=(30, 40)))
+
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
