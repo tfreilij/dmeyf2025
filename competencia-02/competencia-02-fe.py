@@ -18,8 +18,9 @@ file_target = os.path.join(BUCKETS,BUCKET_TARGET, "competencia_02_fe.csv")
 
 fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 nombre_log = f"log_fe_{fecha}.log"
-log_path =os.path.join(BUCKETS,BUCKET_TARGET,"log", nombre_log)
-os.makedirs(log_path, exist_ok=True)
+log_directory = os.path.join(BUCKETS,BUCKET_TARGET,"log",)
+os.makedirs(log_directory, exist_ok=True)
+log_path =os.path.join(log_directory, nombre_log)
 
 logging.basicConfig(
     level=logging.INFO,
