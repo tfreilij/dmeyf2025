@@ -105,10 +105,10 @@ def build_final_predictions(clientes_predict, predict_models, df_predict, n_envi
   final_predictions = sorted_mean_predictions.with_columns(
         (pl.arange(0, sorted_mean_predictions.height) < n_envios)
         .cast(pl.Int8)
-        .alias("Prediction")
+        .alias("Predicted")
     )
     
-  return final_predictions.select(["numero_de_cliente", "Prediction"])
+  return final_predictions.select(["numero_de_cliente", "Predicted"])
 
 
 ## SE APLICAR UNDERSAMPLING. SÓLO DEBERÍA USARSE EN EL DF_TRAIN
