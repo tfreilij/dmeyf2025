@@ -194,9 +194,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
               'verbose': -1
         }
 
-    best_iter = study.best_trial.user_attrs["best_iter"]
     new_params = study.best_trial.params
-    new_params['n_estimators'] = best_iter
     
     params.update(new_params)
     model = lgb.train(params,train_data)
