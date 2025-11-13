@@ -20,7 +20,7 @@ df_ternaria = df_crudo.with_columns(
     has_next_month = pl.col("next_month_foto_mes").is_not_null(),
     has_next_two_months = pl.col("next_two_months_foto_mes").is_not_null()
 ).with_columns(
-    pl.when(pl.col("foto_mes") >= 202105)
+    pl.when(pl.col("foto_mes") >= 202107)
     .then(pl.lit(None))
     .when(pl.col("has_next_two_months"))
     .then(pl.lit("CONTINUA"))
