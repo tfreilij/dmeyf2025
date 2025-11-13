@@ -72,10 +72,6 @@ def drop_columns(df : pl.DataFrame):
     df = df.drop(col_drops)
     return df
 
-def ganancia_prob(y_pred, y_true, threshold,prop = 1):
-  ganancia = np.where(y_true == 1, GANANCIA_ACIERTO, 0) - np.where(y_true == 0, COSTO_ESTIMULO, 0)
-  return ganancia[y_pred >= threshold].sum() / prop
-
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
@@ -385,6 +381,9 @@ for seed in SEMILLA:
 
 if train_predict_models:
   predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
+
+logger.info("Feature Importance")
+logger.info(lgb.plot_importance(predict_models[0], figsize=(30, 40)))
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
