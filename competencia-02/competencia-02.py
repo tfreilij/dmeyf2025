@@ -406,14 +406,14 @@ logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
-logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test.filter(pl.col("foto_mes") == MES_TEST))}")
+logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test)}")
 
 
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
 df_predict = df_predict.drop(['foto_mes'])
   
 if not SUBMIT:
-  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_test.filter(pl.col("foto_mes") == FINAL_PREDICT))}")
+  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict)}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
   comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
