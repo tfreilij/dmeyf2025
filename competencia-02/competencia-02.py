@@ -84,6 +84,18 @@ def build_predictions(clientes, modelos, dataset):
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
   return pl.DataFrame({'numero_de_cliente': clientes, 'Predicted': mean_predictions})
 
+## FUNCION AUXILIAR QUE ARMO PARA TENER UNA MINIMA COMPARACION CON LO "ESPERADO"
+def ganancia_optima_idealizada(df :pl.DataFrame) -> float:
+  df_ganancias = df.with_columns(
+      pl.when(pl.col('clase_ternaria').is_in(["BAJA+2"]))
+        .then(780000)
+        .alias('ganancia_individual')
+  )
+
+  ganancia = df_ganancias['ganancia_individual'].sum()
+  return ganancia
+
+
 ## SE ARMAN LAS PREDICCIONES PARA EL TARGET
 def build_final_predictions(clientes_predict, predict_models, df_predict, n_envios):
   mean_predictions = build_predictions(clientes_predict, predict_models, df_predict)
@@ -394,24 +406,23 @@ logger.info(lgb.plot_importance(predict_models[0], figsize=(30, 40)))
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
-logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios")
+logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test.filter(pl.col("foto_mes") == MES_TEST))}")
+
 
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
 df_predict = df_predict.drop(['foto_mes'])
   
 if not SUBMIT:
+  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_test.filter(pl.col("foto_mes") == FINAL_PREDICT))}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
-
-comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
-
-# SI ESTAMOS EN ETAPA DE SUBMIT NO TIENE SENTIDO OBTENER LA GANANCIA 
-if not SUBMIT:
+  comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
   ganancia, n_envios = ganancia_evaluator(comp_predictions,df_predict_clase_binaria)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
+  comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
   comp_predictions.write_csv(prediction_path)
 
 logger.info(f"Program Ends")
