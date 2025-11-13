@@ -17,7 +17,7 @@ MES_TRAIN = config["MES_TRAIN"]
 BUCKETS = config["BUCKETS"]
 BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
 BUCKET_TARGET = config["BUCKET_TARGET"]
-SUBMIT = config["SUBMIT"]
+IS_EXPERIMENTO = config["IS_EXPERIMENTO"]
 MES_VALIDACION = config["MES_VALIDACION"]
 STUDY_NAME = config["STUDY_NAME"]
 GANANCIA_ACIERTO = config["GANANCIA_ACIERTO"]
@@ -273,7 +273,7 @@ logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
 
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes'])
-if not SUBMIT:
+if IS_EXPERIMENTO:
   logger.info(f"Dropeamos clase_ternaria del dataframe de predict para después hacer un doble chequeo")
   df_predict_ternaria = df_predict["clase_ternaria"]
   df_train_predict = df_train_predict.drop(["clase_ternaria"])
@@ -417,7 +417,7 @@ logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'opti
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
 df_predict = df_predict.drop(['foto_mes'])
 
-if not SUBMIT:
+if IS_EXPERIMENTO:
   if "clase_ternaria" in df_predict.columns:
     df_predict.drop(["clase_ternaria"])
   logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_ternaria)}")
