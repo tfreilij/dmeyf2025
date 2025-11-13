@@ -419,7 +419,7 @@ df_predict = df_predict.drop(['foto_mes'])
 
 if IS_EXPERIMENTO:
   if "clase_ternaria" in df_predict.columns:
-    df_predict.drop(["clase_ternaria"])
+    df_predict = df_predict.drop(["clase_ternaria"])
   logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_ternaria)}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
