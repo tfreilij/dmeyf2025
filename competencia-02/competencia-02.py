@@ -382,7 +382,7 @@ if train_predict_models:
   predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, run_bayesian_optimization=RUN_BAYESIAN_OPTIMIZATION)
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
-ganancia, n_envios = ganancia_evaluator(test_predictions,df_val_clase_binaria)
+ganancia, n_envios = ganancia_evaluator(test_predictions,df_test_clase_binaria_baja)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios")
 
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
