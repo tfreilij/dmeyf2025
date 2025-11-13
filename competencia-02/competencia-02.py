@@ -404,7 +404,7 @@ if not SUBMIT:
   ganancia, n_envios = ganancia_evaluator(comp_predictions,df_predict_clase_binaria)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
-  prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions_{SUBMISSION_NUMBER}.csv")
+  prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
   comp_predictions.write_csv(prediction_path)
 
