@@ -119,44 +119,68 @@ def undersample_df(df: pl.DataFrame, fraction) -> pl.DataFrame:
 
 ## SE ORDENAN DE MAYOR A MENOR LAS PROBABILIDADES Y SE BUSCA LA MAXIMA GANANCIA JUNTO A LA CANTIDAD DE ENVIOS CORRESPONDIENTES
 def ganancia_evaluator(y_pred, y_true) -> float:
-  """
-  Calcula la ganancia máxima ordenando predicciones.
-  
-  Args:
-    y_pred: DataFrame con columnas 'numero_de_cliente' y 'Predicted'
-    y_true: Series con los valores verdaderos, o DataFrame con 'numero_de_cliente' y 'clase_binaria'
-    df_true: DataFrame original con 'numero_de_cliente' y 'clase_binaria' (opcional, para alineación)
-  """
-  logger.info(f"DEBUG : GANANCIA_EVALUATOR")
-  
-  logger.info(f"DEBUG Y_PRED: {y_pred['Predicted'].value_counts()}")
-  logger.info(f"DEBUG Y_PRED: {y_pred.sort("Predicted", descending=True)}")
-  logger.info(f"DEBUG Y_TRUE: {y_true} ")
+    y_true = y_true.get_label()
 
-  df_eval = y_pred.join(y_true, on='numero_de_cliente', how='inner')
-  #logger.info(f"Ganancia evaluator Y_true : {df_eval['y_true'].sum()} and Y_pred : {df_eval['y_pred_proba'].sum()}")
-  df_ordenado = df_eval.sort('Predicted', descending=True)
+    df_eval = pl.DataFrame({
+        "y_true": y_true,
+        "y_pred_proba": y_pred
+    })
 
-  df_ordenado = df_ordenado.with_columns([
-      pl.when(pl.col('clase_binaria') == 1)
-        .then(GANANCIA_ACIERTO)
-        .otherwise(-COSTO_ESTIMULO)
-        .alias('ganancia_individual'), pl.lit(1).alias('indice')
-  ])
-  
-  df_ordenado = df_ordenado.with_columns([
-      pl.col('ganancia_individual').cum_sum().alias('ganancia_acumulada'),
-      pl.col('indice').cum_sum().alias('indice_acumulado')
-  ])
-  
-  ganancia_maxima_valor = df_ordenado.select(pl.col('ganancia_acumulada').max()).item()
-  envios_ganancia_maxima = df_ordenado.filter(pl.col('ganancia_acumulada') == ganancia_maxima_valor).head(1)
+    df_ordenado = df_eval.sort("y_pred_proba", descending=True)
 
-  ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada').to_series()[0]
-  cantidad_envios = envios_ganancia_maxima.select('indice_acumulado').to_series()[0]
-  logger.info(f"DEBUG : {ganancia_maxima_valor}")
-  logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
-  return ganancia_maxima, cantidad_envios
+    # Ganancia individual por fila
+    df_ordenado = df_ordenado.with_columns([
+        pl.when(pl.col("y_true") == 1)
+          .then(GANANCIA_ACIERTO)
+          .otherwise(-COSTO_ESTIMULO)
+          .alias("ganancia_individual")
+    ])
+
+    # Ganancia acumulada
+    df_ordenado = df_ordenado.with_columns([
+        pl.col("ganancia_individual").cum_sum().alias("ganancia_acumulada")
+    ])
+
+    # Obtener ganancia maxima
+    ganancia_maxima = df_ordenado.select(pl.col("ganancia_acumulada").max()).item()
+
+    # LightGBM espera: (nombre_metric, valor_metric, is_higher_better)
+    return 'gananancia_eval', float(ganancia_maxima), True
+
+def cantidad_envios(y_pred, y_true) -> float:
+    y_true = y_true.get_label()
+
+    df_eval = pl.DataFrame({
+        "y_true": y_true,
+        "y_pred_proba": y_pred
+    })
+
+    df_ordenado = df_eval.sort("y_pred_proba", descending=True)
+
+    # Ganancia individual por fila
+    df_ordenado = df_ordenado.with_columns([
+        pl.when(pl.col("y_true") == 1)
+          .then(GANANCIA_ACIERTO)
+          .otherwise(-COSTO_ESTIMULO)
+          .alias("ganancia_individual")
+    ])
+
+    # Ganancia acumulada
+    df_ordenado = df_ordenado.with_columns([
+        pl.col("ganancia_individual").cum_sum().alias("ganancia_acumulada")
+    ])
+
+    # Obtener ganancia maxima
+    ganancia_maxima = df_ordenado.select(pl.col("ganancia_acumulada").max()).item()
+
+    # Encontrar la primera fila donde se alcanza la ganancia máxima
+    fila_max = df_ordenado.filter(pl.col("ganancia_acumulada") == ganancia_maxima).head(1)
+
+    # Número de envíos = índice acumulado (posición + 1)
+    cantidad_envios = fila_max.height
+
+    # LightGBM espera: (nombre_metric, valor_metric, is_higher_better)
+    return float(ganancia_maxima), cantidad_envios
 
 def generate_clase_peso(df : pl.DataFrame):
 
@@ -336,12 +360,18 @@ def objective(trial) -> float:
 
       modelos[s] = lgb.train(
         params,
-        train_data
+        train_data,
+        feval = ganancia_evaluator,
+        callbacks=[
+                lgb.early_stopping(stopping_rounds=int(50 + 5 / params['learning_rate']), verbose=False),
+                lgb.log_evaluation(period=200)
+            ]
+
       )
     
-    optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, df_val)
+    optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, val_data)
     # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-    ganancia_total,_ = ganancia_evaluator(optimization_predictions, df_val_with_target)
+    _, ganancia_total,_ = ganancia_evaluator(optimization_predictions["Predicted"], val_data)
     logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
     return ganancia_total
 
@@ -408,10 +438,21 @@ logger.info("Feature Importance")
 # lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)).savefig(os.path.join(log_directory, "feature_importance.png"))
 
 
+opt_X_val_pd = df_test_with_target.to_pandas()
+opt_y_val_pd = df_test_with_target["clase_binaria"].to_pandas()
+weight_val_pd = df_test_with_target["clase_peso"].to_pandas()
+
+val_data = lgb.Dataset(
+    opt_X_val_pd,
+    label=opt_y_val_pd,
+    weight=weight_val_pd.to_numpy()
+)
+
 test_predictions = build_predictions(df_test_with_target["numero_de_cliente"], test_models, df_test)
 # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_with_target)
-logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
+_, ganancia,_ = ganancia_evaluator(test_predictions, val_data)
+n_envios_test = cantidad_envios(test_predictions, val_data)
+logger.info(f"Ganancia en Test: {ganancia} con {n_envios_test} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
 # PREPARAMOS EL DATASET DE PREDICCION PARA PASARLO POR EL MODELO
@@ -430,8 +471,20 @@ if IS_EXPERIMENTO:
     logger.info(f"Dropping columns from df_predict: {cols_to_drop}")
     df_predict = df_predict.drop(cols_to_drop)
   
-  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
-  ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_with_target)
+  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios_test)
+
+  opt_X_val_pd = df_predict_with_target.to_pandas()
+  opt_y_val_pd = df_predict_with_target["clase_binaria"].to_pandas()
+  weight_val_pd = df_predict_with_target["clase_peso"].to_pandas()
+
+  val_data = lgb.Dataset(
+      opt_X_val_pd,
+      label=opt_y_val_pd,
+      weight=weight_val_pd.to_numpy()
+  )
+
+  _, ganancia,_ = ganancia_evaluator(comp_predictions, val_data)
+  n_envios = cantidad_envios(test_predictions, val_data)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   # Drop target columns from df_predict before passing to model
@@ -442,7 +495,7 @@ else:
   
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
-  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
+  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios_test)
   comp_predictions.write_csv(prediction_path)
 
 logger.info(f"Program Ends")
