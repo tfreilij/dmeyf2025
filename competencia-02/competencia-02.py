@@ -117,7 +117,7 @@ def undersample_df(df: pl.DataFrame, fraction) -> pl.DataFrame:
   return df
 
 ## SE ORDENAN DE MAYOR A MENOR LAS PROBABILIDADES Y SE BUSCA LA MAXIMA GANANCIA JUNTO A LA CANTIDAD DE ENVIOS CORRESPONDIENTES
-def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
+def ganancia_evaluator(y_pred, y_true) -> float:
   """
   Calcula la ganancia máxima ordenando predicciones.
   
@@ -131,9 +131,9 @@ def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
   logger.info(f"DEBUG Y_TRUE: {y_true} ")
 
   # Si y_true es un Series y tenemos df_true, extraer y alinear por numero_de_cliente
-  if df_true is not None and 'numero_de_cliente' in df_true.columns and 'clase_binaria' in df_true.columns:
+  if y_true is not None and 'numero_de_cliente' in y_true.columns and 'clase_binaria' in y_true.columns:
     # Crear DataFrame con numero_de_cliente y clase_binaria desde df_true
-    y_true_df = df_true.select(['numero_de_cliente', 'clase_binaria']).rename({'clase_binaria': 'y_true'})
+    y_true_df = y_true.select(['numero_de_cliente', 'clase_binaria']).rename({'clase_binaria': 'y_true'})
     # Hacer join para alinear por numero_de_cliente
     df_eval = y_pred.join(y_true_df, on='numero_de_cliente', how='inner')
     logger.info(f"Ganancia evaluator - Alineados {df_eval.height} registros por numero_de_cliente")
@@ -150,6 +150,7 @@ def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
   #logger.info(f"Ganancia evaluator Y_true : {df_eval['y_true'].sum()} and Y_pred : {df_eval['y_pred_proba'].sum()}")
   df_eval = df_eval.rename({"Predicted": "y_pred_proba"})
   df_ordenado = df_eval.sort('y_pred_proba', descending=True)
+
   df_ordenado = df_ordenado.with_columns([
       pl.when(pl.col('y_true') == 1)
         .then(GANANCIA_ACIERTO)
@@ -201,14 +202,14 @@ def generate_clase_binaria(df : pl.DataFrame):
     return df
 
 ## SE ARMA EL MODELO Y DE SER POSIBLE SE PERSISTE PARA PODER USARLO PARA OTRA PREDICCIÓN.
-def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame , weight : pl.DataFrame, is_test, undersampling_fraction) -> list:
+def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, y_target : pl.DataFrame, is_test, undersampling_fraction) -> list:
 
   if undersampling_fraction == None or is_test == None:
     raise RuntimeError(f"Undersampling Fraction {undersampling_fraction} o Is Test {is_test} parameters no pueden ser None")
 
   train_dataset_pd = train_dataset.to_pandas()
-  y_target_pd = y_target.to_pandas()
-  weight_pd = weight.to_pandas()
+  y_target_pd = y_target["clase_binaria"].to_pandas()
+  weight_pd = y_target["clase_peso"].to_pandas()
 
   train_data = lgb.Dataset(train_dataset_pd,
                               label=y_target_pd,
@@ -279,37 +280,31 @@ df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 
-df_train_clase_binaria_baja = df_train['clase_binaria']
-df_test_clase_binaria_baja = df_test['clase_binaria']
-df_predict_clase_binaria_baja = df_train_predict['clase_binaria']
-df_val_clase_binaria = df_val['clase_binaria']
-
 # Crear DataFrames de alineación con numero_de_cliente y clase_binaria antes de cualquier drop
-df_val_with_target = df_val.select(['numero_de_cliente', 'clase_binaria'])
-df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria'])
-
-df_train_predict_weight = df_train_predict['clase_peso']
-df_val_weight = df_val['clase_peso']
-df_train_weight = df_train['clase_peso']
-
-logger.info("Drop columns foto_mes, clase_binaria and clase_peso")
-
-df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes'])
+df_train_with_target = df_train.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+df_val_with_target = df_val.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+df_train_predict = df_train_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
 if IS_EXPERIMENTO:
   logger.info(f"Dropeamos clase_ternaria del dataframe de predict para después hacer un doble chequeo")
-  df_predict_ternaria = df_predict["clase_ternaria"]
-  df_train_predict = df_train_predict.drop(["clase_ternaria"])
-  
+  df_predict_with_target = df_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso','clase_ternaria'])
+
+
+df_predict_clientes = df_predict.select(['numero_de_cliente'])
+
+df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+
 df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+
 df_test_ternaria = df_test["clase_ternaria"]
+
 df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
+logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_with_target.shape}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target["clase_binaria"].sum()}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target["clase_binaria"].value_counts()}")
 
-logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_clase_binaria.shape} , {df_val_weight.shape}")
-logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_clase_binaria.sum()}")
-logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_clase_binaria.value_counts()}")
-logger.info(f"Opt Train Data : {len(df_train.columns)} , {df_train_clase_binaria_baja.shape} , {df_train_weight.shape}")
 # FUNCION OBJETIVO PARA OPTUNA
 def objective(trial) -> float:
 
@@ -323,8 +318,8 @@ def objective(trial) -> float:
     num_iterations = trial.suggest_int('num_iterations', 100, 500)
 
     opt_train_pd = df_train.to_pandas()
-    opt_y_pd = df_train_clase_binaria_baja.to_pandas()
-    opt_weight_pd = df_train_weight.to_pandas()
+    opt_y_pd = df_train_with_target["clase_binaria"].to_pandas()
+    opt_weight_pd = df_train_with_target["clase_peso"].to_pandas()
 
     logger.info(f"Opt Train Data : {len(opt_train_pd.columns)} , {opt_y_pd.shape} , {opt_weight_pd.shape}")
     train_data = lgb.Dataset(opt_train_pd,
@@ -352,8 +347,8 @@ def objective(trial) -> float:
         }
 
       opt_X_val_pd = df_val.to_pandas()
-      opt_y_val_pd = df_val_clase_binaria.to_pandas()
-      weight_val_pd = df_val_weight.to_pandas()
+      opt_y_val_pd = df_val_with_target["clase_binaria"].to_pandas()
+      weight_val_pd = df_val_with_target["clase_peso"].to_pandas()
 
       val_data = lgb.Dataset(
           opt_X_val_pd,
@@ -370,7 +365,7 @@ def objective(trial) -> float:
     
     optimization_predictions = build_predictions(clientes_val, modelos, df_val)
     # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-    ganancia_total,_ = ganancia_evaluator(optimization_predictions, df_val_clase_binaria, df_true=df_val_with_target)
+    ganancia_total,_ = ganancia_evaluator(optimization_predictions, df_val_with_target)
     logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
     return ganancia_total
 
@@ -411,7 +406,7 @@ if train_test_models:
 
 if train_test_models:
   logger.info(f"Train models {df_train_predict.shape} ")
-  test_models = build_and_save_models(study, SEMILLA, df_train, df_train_clase_binaria_baja, df_train_weight,is_test=True,undersampling_fraction=UNDERSAMPLE_FRACTION)
+  test_models = build_and_save_models(study, SEMILLA, df_train, df_train_with_target,is_test=True,undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 # SIMILAR A PREDICCIÓN. EN ESTE CASO SE VA A HACER SIEMPRE
 train_predict_models = True
@@ -429,7 +424,7 @@ for seed in SEMILLA:
     logger.info(f"Predict model for seed {seed} does not exist. Will be trained.")
 
 if train_predict_models:
-  predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_predict_clase_binaria_baja, df_train_predict_weight, is_test=False, undersampling_fraction=UNDERSAMPLE_FRACTION)
+  predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_val_with_target, is_test=False, undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 logger.info("Feature Importance")
 logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
@@ -437,7 +432,7 @@ logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 test_predictions = build_predictions(clientes_test, test_models, df_test)
 # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_clase_binaria_baja, df_true=df_test_with_target)
+ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_with_target["clase_binaria"], df_true=df_test_with_target)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
@@ -447,7 +442,7 @@ df_predict = df_predict.drop(['foto_mes'])
 if IS_EXPERIMENTO:
   if "clase_ternaria" in df_predict.columns:
     df_predict = df_predict.drop(["clase_ternaria"])
-  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_ternaria)}")
+  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_with_target["clase_ternaria"])}")
   df_predict_clase_binaria = df_predict["clase_binaria"]
   # Reconstruir DataFrame con numero_de_cliente y clase_binaria para alinear correctamente
   df_predict_with_target = df_predict.select(['numero_de_cliente']).with_columns(df_predict_clase_binaria.alias('clase_binaria'))
