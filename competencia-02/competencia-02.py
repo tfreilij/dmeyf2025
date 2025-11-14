@@ -127,32 +127,17 @@ def ganancia_evaluator(y_pred, y_true) -> float:
     df_true: DataFrame original con 'numero_de_cliente' y 'clase_binaria' (opcional, para alineación)
   """
   logger.info(f"DEBUG : GANANCIA_EVALUATOR")
-  logger.info(f"DEBUG Y_PRED: {y_pred}")
+  
+  logger.info(f"DEBUG Y_PRED: {y_pred["Predicted"].value_counts()}")
+  logger.info(f"DEBUG Y_PRED: {y_pred.sort(by=["Predicted"], descending=[True])}")
   logger.info(f"DEBUG Y_TRUE: {y_true} ")
 
-  # Si y_true es un Series y tenemos df_true, extraer y alinear por numero_de_cliente
-  if y_true is not None and 'numero_de_cliente' in y_true.columns and 'clase_binaria' in y_true.columns:
-    # Crear DataFrame con numero_de_cliente y clase_binaria desde df_true
-    y_true_df = y_true.select(['numero_de_cliente', 'clase_binaria']).rename({'clase_binaria': 'y_true'})
-    # Hacer join para alinear por numero_de_cliente
-    df_eval = y_pred.join(y_true_df, on='numero_de_cliente', how='inner')
-    logger.info(f"Ganancia evaluator - Alineados {df_eval.height} registros por numero_de_cliente")
-  elif isinstance(y_true, pl.DataFrame) and 'numero_de_cliente' in y_true.columns:
-    # Si y_true ya es un DataFrame con numero_de_cliente, hacer join
-    y_true_df = y_true.select(['numero_de_cliente', y_true.columns[-1]]).rename({y_true.columns[-1]: 'y_true'})
-    df_eval = y_pred.join(y_true_df, on='numero_de_cliente', how='inner')
-    logger.info(f"Ganancia evaluator - Alineados {df_eval.height} registros por numero_de_cliente")
-  else:
-    # Comportamiento original: asumir mismo orden (puede ser incorrecto)
-    logger.warning("Ganancia evaluator - Usando alineación por índice (puede ser incorrecto si los órdenes no coinciden)")
-    df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
-  
+  df_eval = y_pred.join(y_true, on='numero_de_cliente', how='inner')
   #logger.info(f"Ganancia evaluator Y_true : {df_eval['y_true'].sum()} and Y_pred : {df_eval['y_pred_proba'].sum()}")
-  df_eval = df_eval.rename({"Predicted": "y_pred_proba"})
-  df_ordenado = df_eval.sort('y_pred_proba', descending=True)
+  df_ordenado = df_eval.sort('Predicted', descending=True)
 
   df_ordenado = df_ordenado.with_columns([
-      pl.when(pl.col('y_true') == 1)
+      pl.when(pl.col('clase_binaria') == 1)
         .then(GANANCIA_ACIERTO)
         .otherwise(-COSTO_ESTIMULO)
         .alias('ganancia_individual'), pl.lit(1).alias('indice')
@@ -168,6 +153,7 @@ def ganancia_evaluator(y_pred, y_true) -> float:
 
   ganancia_maxima = envios_ganancia_maxima.select('ganancia_acumulada').to_series()[0]
   cantidad_envios = envios_ganancia_maxima.select('indice_acumulado').to_series()[0]
+  logger.info(f"DEBUG : {ganancia_maxima_valor}")
   logger.info(f"GANANCIA MAXIMA : {ganancia_maxima} , {cantidad_envios}")
   return ganancia_maxima, cantidad_envios
 
