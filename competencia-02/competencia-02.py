@@ -73,9 +73,10 @@ def drop_columns(df : pl.DataFrame):
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
+  X = dataset.data
   for seed,model in modelos.items():
     if seed in SEMILLA:
-      predictions = model.predict(dataset)
+      predictions = model.predict(X)
       predicciones[seed] = predictions
 
   mean_predictions = np.mean(list(predicciones.values()), axis=0)
