@@ -94,8 +94,8 @@ def ganancia_optima_idealizada(df :pl.DataFrame, ternaria : pl.Series) -> float:
 
 
 ## SE ARMAN LAS PREDICCIONES PARA EL TARGET
-def build_final_predictions(clientes_predict, predict_models, df_predict, n_envios):
-  mean_predictions = build_predictions(clientes_predict, predict_models, df_predict)
+def build_final_predictions(clientes, predict_models, df_predict, n_envios):
+  mean_predictions = build_predictions(clientes, predict_models, df_predict)
   sorted_mean_predictions = mean_predictions.sort('Predicted', descending=True)
   final_predictions = sorted_mean_predictions.with_columns(
         (pl.arange(0, sorted_mean_predictions.height) < n_envios)
@@ -270,14 +270,7 @@ if IS_EXPERIMENTO:
   logger.info(f"Dropeamos clase_ternaria del dataframe de predict para después hacer un doble chequeo")
   df_predict_with_target = df_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso','clase_ternaria'])
 
-logger.info(f"?!?!?!?!?!?!?!?")
 df_predict_clientes = df_predict.select(['numero_de_cliente'])
-
-# Extract client IDs AFTER creating the filtered dataframes to ensure perfect alignment
-logger.info("Split Clientes")
-clientes_test = df_test_with_target["numero_de_cliente"]
-clientes_val = df_val_with_target["numero_de_cliente"]
-clientes_predict = df_predict_clientes["numero_de_cliente"]
 
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
@@ -350,7 +343,7 @@ def objective(trial) -> float:
         callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
       )
     
-    optimization_predictions = build_predictions(clientes_val, modelos, df_val)
+    optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, df_val)
     # Usar DataFrame de alineación pre-construido para asegurar mismo orden
     ganancia_total,_ = ganancia_evaluator(optimization_predictions, df_val_with_target)
     logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
@@ -417,7 +410,7 @@ logger.info("Feature Importance")
 logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
 
 
-test_predictions = build_predictions(clientes_test, test_models, df_test)
+test_predictions = build_predictions(df_test_with_target["numero_de_cliente"], test_models, df_test)
 # Usar DataFrame de alineación pre-construido para asegurar mismo orden
 ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_with_target["clase_binaria"], df_true=df_test_with_target)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
@@ -434,13 +427,13 @@ if IS_EXPERIMENTO:
   # Reconstruir DataFrame con numero_de_cliente y clase_binaria para alinear correctamente
   df_predict_with_target = df_predict.select(['numero_de_cliente']).with_columns(df_predict_clase_binaria.alias('clase_binaria'))
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
-  comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
+  comp_predictions = build_final_predictions(df_predict_clientes["numero_de_cliente"], predict_models, df_predict, n_envios)
   ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_clase_binaria, df_true=df_predict_with_target)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
-  comp_predictions = build_final_predictions(clientes_predict, predict_models, df_predict, n_envios)
+  comp_predictions = build_final_predictions(df_predict_clientes["numero_de_cliente"], predict_models, df_predict, n_envios)
   comp_predictions.write_csv(prediction_path)
 
 logger.info(f"Program Ends")
