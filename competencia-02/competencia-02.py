@@ -342,7 +342,6 @@ def objective(trial) -> float:
         params,
         train_data,
         feval=lgb_gan_eval,
-        valid_sets=[val_data],
         callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
       )
     
