@@ -275,7 +275,7 @@ if IS_EXPERIMENTO:
   logger.info(f"Dropeamos clase_ternaria del dataframe de predict para después hacer un doble chequeo")
   df_predict_with_target = df_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso','clase_ternaria'])
 
-
+logger.info(f"?!?!?!?!?!?!?!?")
 df_predict_clientes = df_predict.select(['numero_de_cliente'])
 
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
