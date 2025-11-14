@@ -9,8 +9,6 @@ import os
 import datetime
 from load_config import Config
 
-logger = logging.getLogger(__name__)
-
 ## VARIABLES DE ENTORNO Y CONFIGURACION
 config = Config()
 MES_TRAIN = config["MES_TRAIN"]
@@ -36,9 +34,6 @@ if BUCKET_ORIGIN == BUCKET_TARGET:
 if BUCKET_TARGET == "b1":
   raise RuntimeError("Bucket Target no puede ser b1")
 
-submission_number = 1
-
-
 ## DIRECTORIOS PARA LOGGING Y MODELOS
 bucket_target = os.path.join(BUCKETS,BUCKET_TARGET)
 modelos_directory = os.path.join(bucket_target,"modelos")
@@ -59,6 +54,8 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+logger = logging.getLogger(__name__)
 
 ## DROPEAR COLUMNAS QUE NO VAN PARA ENTRENAMIENTO
 def drop_columns(df : pl.DataFrame):
@@ -242,9 +239,9 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
 
     modelos[seed] = model
     if is_test:
-      model.save_model(os.path.join(modelos_directory,f"lgb_test_{seed}_{submission_number}.txt"))
+      model.save_model(os.path.join(modelos_directory,f"lgb_test_{seed}.txt"))
     else:
-      model.save_model(os.path.join(modelos_directory,f"lgb_predict_{seed}_{submission_number}.txt"))
+      model.save_model(os.path.join(modelos_directory,f"lgb_predict_{seed}.txt"))
   return modelos
 
 
