@@ -74,7 +74,7 @@ def drop_columns(df : pl.DataFrame):
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
   logger.info(f"Dataset : {dataset}")
-  X = dataset.get_data()
+  X = dataset.data
   logger.info(f"X : {dataset}")
   for seed,model in modelos.items():
     if seed in SEMILLA:
