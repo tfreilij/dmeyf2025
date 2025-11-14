@@ -150,7 +150,7 @@ def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
     df_eval = pl.DataFrame({'y_true': y_true,'y_pred_proba': y_pred["Predicted"]})
   
   #logger.info(f"Ganancia evaluator Y_true : {df_eval['y_true'].sum()} and Y_pred : {df_eval['y_pred_proba'].sum()}")
-  
+  df_eval = df_eval.rename({"Predicted": "y_pred_proba"})
   df_ordenado = df_eval.sort('y_pred_proba', descending=True)
   df_ordenado = df_ordenado.with_columns([
       pl.when(pl.col('y_true') == 1)
