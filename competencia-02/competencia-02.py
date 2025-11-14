@@ -73,7 +73,9 @@ def drop_columns(df : pl.DataFrame):
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
+  logger.info(f"Dataset : {dataset}")
   X = dataset.data
+  logger.info(f"X : {dataset}")
   for seed,model in modelos.items():
     if seed in SEMILLA:
       predictions = model.predict(X)
