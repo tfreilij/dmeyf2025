@@ -361,6 +361,7 @@ def objective(trial) -> float:
       modelos[s] = lgb.train(
         params,
         train_data,
+        valid_sets=[val_data],
         feval = ganancia_evaluator,
         callbacks=[
                 lgb.early_stopping(stopping_rounds=int(50 + 5 / params['learning_rate']), verbose=False),
