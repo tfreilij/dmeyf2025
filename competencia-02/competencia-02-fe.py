@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 config = Config()
 BUCKETS = config["BUCKETS"]
 BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
-BUCKET_TARGET = config["BUCKET_TARGET"]
+BUCKET_TARGET = config["BUCKET_ORIGIN"]
 
 file_origin = os.path.join(BUCKETS,BUCKET_ORIGIN, "competencia_02.csv")
 file_target = os.path.join(BUCKETS,BUCKET_TARGET, "competencia_02_fe.csv")
