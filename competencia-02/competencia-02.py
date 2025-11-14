@@ -71,7 +71,6 @@ def drop_columns(df : pl.DataFrame):
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
   predicciones = {}
-  logger.info(f"Build predictions for {SEMILLA}")
   for seed,model in modelos.items():
     if seed in SEMILLA:
       predictions = model.predict(dataset)
@@ -127,7 +126,10 @@ def ganancia_evaluator(y_pred, y_true, df_true=None) -> float:
     y_true: Series con los valores verdaderos, o DataFrame con 'numero_de_cliente' y 'clase_binaria'
     df_true: DataFrame original con 'numero_de_cliente' y 'clase_binaria' (opcional, para alineación)
   """
-  
+  logger.info(f"DEBUG : GANANCIA_EVALUATOR")
+  logger.info(f"DEBUG Y_PRED: {y_pred}")
+  logger.info(f"DEBUG Y_TRUE: {y_true} ")
+
   # Si y_true es un Series y tenemos df_true, extraer y alinear por numero_de_cliente
   if df_true is not None and 'numero_de_cliente' in df_true.columns and 'clase_binaria' in df_true.columns:
     # Crear DataFrame con numero_de_cliente y clase_binaria desde df_true
@@ -305,6 +307,8 @@ df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"
 
 
 logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_clase_binaria.shape} , {df_val_weight.shape}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_clase_binaria.sum()}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_clase_binaria.value_counts()}")
 logger.info(f"Opt Train Data : {len(df_train.columns)} , {df_train_clase_binaria_baja.shape} , {df_train_weight.shape}")
 # FUNCION OBJETIVO PARA OPTUNA
 def objective(trial) -> float:
