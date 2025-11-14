@@ -128,8 +128,8 @@ def ganancia_evaluator(y_pred, y_true) -> float:
   """
   logger.info(f"DEBUG : GANANCIA_EVALUATOR")
   
-  logger.info(f"DEBUG Y_PRED: {y_pred["Predicted"].value_counts()}")
-  logger.info(f"DEBUG Y_PRED: {y_pred.sort(by=["Predicted"], descending=[True])}")
+  logger.info(f"DEBUG Y_PRED: {y_pred['Predicted'].value_counts()}")
+  logger.info(f"DEBUG Y_PRED: {y_pred.sort("Predicted", descending=True)}")
   logger.info(f"DEBUG Y_TRUE: {y_true} ")
 
   df_eval = y_pred.join(y_true, on='numero_de_cliente', how='inner')
@@ -305,7 +305,7 @@ def objective(trial) -> float:
     for s in SEMILLA:
       params = {
         'objective': 'binary',
-        'metric': None,
+        'metric': 'auc',
         'boosting_type': 'rf',
         'first_metric_only': True,
         'boost_from_average': True,
