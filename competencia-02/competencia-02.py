@@ -28,12 +28,6 @@ UNDERSAMPLE_FRACTION = config["UNDERSAMPLING_FRACTION"]
 RUN_BAYESIAN_OPTIMIZATION = config["RUN_BAYESIAN_OPTIMIZATION"]
 N_TRIALS = config["N_TRIALS"]
 
-if BUCKET_ORIGIN == BUCKET_TARGET:
-  raise RuntimeError("Bucket de Origen y Bucket de Destino no pueden ser iguales")
-
-if BUCKET_TARGET == "b1":
-  raise RuntimeError("Bucket Target no puede ser b1")
-
 ## DIRECTORIOS PARA LOGGING Y MODELOS
 bucket_target = os.path.join(BUCKETS,BUCKET_TARGET)
 modelos_directory = os.path.join(bucket_target,"modelos")
@@ -56,6 +50,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+if BUCKET_ORIGIN == BUCKET_TARGET:
+  raise RuntimeError("Bucket de Origen y Bucket de Destino no pueden ser iguales")
+
+if BUCKET_TARGET == "b1":
+  raise RuntimeError("Bucket Target no puede ser b1")
 
 ## DROPEAR COLUMNAS QUE NO VAN PARA ENTRENAMIENTO
 def drop_columns(df : pl.DataFrame):
@@ -335,8 +336,7 @@ def objective(trial) -> float:
 
       modelos[s] = lgb.train(
         params,
-        train_data,
-        callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
+        train_data
       )
     
     optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, df_val)
