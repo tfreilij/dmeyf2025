@@ -73,17 +73,17 @@ def generate_deltas(df : pl.DataFrame):
     for c in numeric_cols:
         logger.info(f"Delta for column {c}")
         expressions.append(
-            pl.col(c).shift(1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
+            pl.col(c).shift(1, fill_null=0).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
         )
         expressions.append(
-            pl.col(c).shift(2).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64)
+            pl.col(c).shift(2, fill_null=0).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64)
         )
 
         expressions.append(
-            (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64)
+            (pl.col(c) - pl.col(c).shift(1, fill_null=0).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64)
         )
         expressions.append(
-            (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64)
+            (pl.col(c) - pl.col(c).shift(2, fill_null=0).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64)
         )
 
     return df.with_columns(expressions)
@@ -95,7 +95,7 @@ def run_feature_engineering():
     
     logger.info(f"Reading dataset {file_origin}")
     df = pl.read_csv(file_origin)
-    df = df.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, True])
+    df = df.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, False])
     logger.info("Generating deltas")
     df = generate_deltas(df)
     logger.info("Writing dataset")
