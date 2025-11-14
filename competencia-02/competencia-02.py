@@ -92,14 +92,6 @@ def ganancia_optima_idealizada(df :pl.DataFrame, ternaria : pl.Series) -> float:
   ganancia = df_ganancias['ganancia_individual'].sum()
   return ganancia
 
-def lgb_gan_eval(y_pred, data):
-    weight = data.get_weight()
-    ganancia = np.where(weight == 1.00002, GANANCIA_ACIERTO, 0) - np.where(weight < 1.00002, COSTO_ESTIMULO, 0)
-    ganancia = ganancia[np.argsort(y_pred)[::-1]]
-    ganancia = np.cumsum(ganancia)
-
-    return 'gan_eval', np.max(ganancia) , True
-
 ## SE ARMAN LAS PREDICCIONES PARA EL TARGET
 def build_final_predictions(clientes, predict_models, df_predict, n_envios):
   mean_predictions = build_predictions(clientes, predict_models, df_predict)
@@ -226,11 +218,13 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
               'verbose': -1
         }
 
-    new_params = study.best_trial.params
+    if len(study.trials) == 0:
+      raise RuntimeError("No trials found in study. Run optimization first.")
+    new_params = study.best_trial.params.copy()
     new_params["min_data_in_leaf"] = new_params["min_data_in_leaf"] * 100 / undersampling_fraction
     
     params.update(new_params)
-    model = lgb.train(params,train_data, feval= lgb_gan_eval)
+    model = lgb.train(params,train_data)
 
     modelos[seed] = model
     if is_test:
@@ -408,12 +402,14 @@ if train_predict_models:
   predict_models = build_and_save_models(study, SEMILLA,df_train_predict,df_val_with_target, is_test=False, undersampling_fraction=UNDERSAMPLE_FRACTION)
 
 logger.info("Feature Importance")
-logger.info(lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)))
+# Note: plot_importance returns a matplotlib figure, not suitable for logging
+# Uncomment the following line if you want to save the plot:
+# lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)).savefig(os.path.join(log_directory, "feature_importance.png"))
 
 
 test_predictions = build_predictions(df_test_with_target["numero_de_cliente"], test_models, df_test)
 # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_with_target["clase_binaria"], df_true=df_test_with_target)
+ganancia, n_envios = ganancia_evaluator(test_predictions, df_test_with_target)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
@@ -421,17 +417,28 @@ logger.info(f"Ganancia en Test: {ganancia} con {n_envios} envios. Ganancia 'opti
 df_predict = df_predict.drop(['foto_mes'])
 
 if IS_EXPERIMENTO:
-  if "clase_ternaria" in df_predict.columns:
-    df_predict = df_predict.drop(["clase_ternaria"])
-  logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict,df_predict_with_target["clase_ternaria"])}")
-  df_predict_clase_binaria = df_predict["clase_binaria"]
-  # Reconstruir DataFrame con numero_de_cliente y clase_binaria para alinear correctamente
-  df_predict_with_target = df_predict.select(['numero_de_cliente']).with_columns(df_predict_clase_binaria.alias('clase_binaria'))
-  df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
+  # df_predict_with_target was created earlier with clase_ternaria for experiments
+  # Extract clase_ternaria for the ideal ganancia calculation
+  if "clase_ternaria" in df_predict_with_target.columns:
+    df_predict_ternaria = df_predict_with_target["clase_ternaria"]
+    logger.info(f"Ganancia 'optima' en Prediccion usada como pruebas: {ganancia_optima_idealizada(df_predict, df_predict_ternaria)}")
+  
+  # Drop target columns from df_predict before passing to model
+  cols_to_drop = [col for col in ['clase_binaria','clase_peso',"clase_ternaria"] if col in df_predict.columns]
+  if cols_to_drop:
+    logger.info(f"Dropping columns from df_predict: {cols_to_drop}")
+    df_predict = df_predict.drop(cols_to_drop)
+  
   comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
-  ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_clase_binaria, df_true=df_predict_with_target)
+  ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_with_target)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
+  # Drop target columns from df_predict before passing to model
+  cols_to_drop = [col for col in ['clase_binaria','clase_peso',"clase_ternaria"] if col in df_predict.columns]
+  if cols_to_drop:
+    logger.info(f"Dropping columns from df_predict: {cols_to_drop}")
+    df_predict = df_predict.drop(cols_to_drop)
+  
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
   comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
