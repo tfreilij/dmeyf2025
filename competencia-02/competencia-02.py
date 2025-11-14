@@ -256,8 +256,8 @@ df = generate_clase_peso(df)
 df = generate_clase_binaria(df)
 df = drop_columns(df)
 
-df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
-df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
+df_train = df.filter(pl.col('foto_mes').is_in([202006,202007]))
+#df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
 
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
