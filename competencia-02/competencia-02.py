@@ -362,7 +362,7 @@ def objective(trial) -> float:
     )
 
     modelos = {}
-    for s in SEMILLA:
+    for s in [SEMILLA[0]]:
       params = {
         'objective': 'binary',
         'metric': 'custom',
