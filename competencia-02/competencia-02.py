@@ -72,10 +72,30 @@ def drop_columns(df : pl.DataFrame):
 
 ## SE ARMAN LAS PREDICCIONES PROMEDIADAS
 def build_predictions(clientes, modelos, dataset):
+  """
+  Build predictions by averaging across multiple models.
+  
+  Args:
+    clientes: Series or array of client IDs
+    modelos: Dict of models keyed by seed
+    dataset: Can be a polars DataFrame, pandas DataFrame, or lgb.Dataset
+  """
   predicciones = {}
-  logger.info(f"Dataset : {dataset}")
-  X = dataset.data
-  logger.info(f"X : {dataset}")
+  
+  # Convert dataset to pandas DataFrame for prediction
+  if isinstance(dataset, pl.DataFrame):
+    X = dataset.to_pandas()
+  elif isinstance(dataset, lgb.Dataset):
+    # Extract data from LightGBM Dataset
+    X = dataset.data
+    if X is None:
+      raise ValueError("Cannot extract data from lgb.Dataset. Pass a DataFrame instead.")
+  elif hasattr(dataset, 'to_pandas'):
+    X = dataset.to_pandas()
+  else:
+    # Assume it's already a pandas DataFrame or numpy array
+    X = dataset
+  
   for seed,model in modelos.items():
     if seed in SEMILLA:
       predictions = model.predict(X)
@@ -375,9 +395,10 @@ def objective(trial) -> float:
 
       )
     
-    optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, val_data)
+    optimization_predictions = build_predictions(df_val_with_target["numero_de_cliente"], modelos, df_val)
     # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-    _, ganancia_total,_ = ganancia_evaluator(optimization_predictions["Predicted"], val_data)
+    # ganancia_evaluator returns (name, value, is_higher_better) tuple
+    _, ganancia_total, _ = ganancia_evaluator(optimization_predictions["Predicted"].to_numpy(), val_data)
     logger.info(f"Finished Trial {trial.number}: Ganancia = {ganancia_total}")
     return ganancia_total
 
@@ -444,20 +465,23 @@ logger.info("Feature Importance")
 # lgb.plot_importance(predict_models[SEMILLA[0]], figsize=(30, 40)).savefig(os.path.join(log_directory, "feature_importance.png"))
 
 
-opt_X_val_pd = df_test_with_target.to_pandas()
+# Create Dataset for evaluation (only needs labels, not features)
 opt_y_val_pd = df_test_with_target["clase_binaria"].to_pandas()
 weight_val_pd = df_test_with_target["clase_peso"].to_pandas()
 
-val_data = lgb.Dataset(
-    opt_X_val_pd,
+# Create a dummy dataset just for evaluation (we only need the labels)
+# Use df_test features for the dataset structure, but we'll only use labels
+val_data_test = lgb.Dataset(
+    df_test.to_pandas(),
     label=opt_y_val_pd,
     weight=weight_val_pd.to_numpy()
 )
 
 test_predictions = build_predictions(df_test_with_target["numero_de_cliente"], test_models, df_test)
 # Usar DataFrame de alineación pre-construido para asegurar mismo orden
-_, ganancia,_ = ganancia_evaluator(test_predictions, val_data)
-n_envios_test = cantidad_envios(test_predictions, val_data)
+# ganancia_evaluator expects numpy array and Dataset
+_, ganancia, _ = ganancia_evaluator(test_predictions["Predicted"].to_numpy(), val_data_test)
+_, n_envios_test = cantidad_envios(test_predictions["Predicted"].to_numpy(), val_data_test)
 logger.info(f"Ganancia en Test: {ganancia} con {n_envios_test} envios. Ganancia 'optima' : {ganancia_optima_idealizada(df_test, df_test_ternaria)}")
 
 
@@ -479,18 +503,25 @@ if IS_EXPERIMENTO:
   
   comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios_test)
 
-  opt_X_val_pd = df_predict_with_target.to_pandas()
+  # Create Dataset for evaluation - need features from df_predict (before dropping target cols)
+  # But we already dropped them, so we need to reconstruct or use a different approach
+  # Actually, we can create a dummy dataset with the right number of rows
   opt_y_val_pd = df_predict_with_target["clase_binaria"].to_pandas()
-  weight_val_pd = df_predict_with_target["clase_peso"].to_pandas()
+  weight_val_pd = df_predict_with_target["clase_peso"].to_pandas() if "clase_peso" in df_predict_with_target.columns else None
 
-  val_data = lgb.Dataset(
-      opt_X_val_pd,
+  # Create a dummy dataset with same number of rows as predictions for evaluation
+  # We'll use df_predict but it should have the same number of rows
+  # Actually, we need to add back the features temporarily or create a minimal dataset
+  # For now, let's create a minimal dataset with the right structure
+  dummy_features = np.zeros((len(opt_y_val_pd), len(df_predict.columns)))
+  val_data_predict = lgb.Dataset(
+      dummy_features,
       label=opt_y_val_pd,
-      weight=weight_val_pd.to_numpy()
+      weight=weight_val_pd.to_numpy() if weight_val_pd is not None else None
   )
 
-  _, ganancia,_ = ganancia_evaluator(comp_predictions, val_data)
-  n_envios = cantidad_envios(test_predictions, val_data)
+  _, ganancia, _ = ganancia_evaluator(comp_predictions["Predicted"].to_numpy(), val_data_predict)
+  _, n_envios = cantidad_envios(comp_predictions["Predicted"].to_numpy(), val_data_predict)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   # Drop target columns from df_predict before passing to model
