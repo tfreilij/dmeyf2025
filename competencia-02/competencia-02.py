@@ -92,6 +92,13 @@ def ganancia_optima_idealizada(df :pl.DataFrame, ternaria : pl.Series) -> float:
   ganancia = df_ganancias['ganancia_individual'].sum()
   return ganancia
 
+def lgb_gan_eval(y_pred, data):
+    weight = data.get_weight()
+    ganancia = np.where(weight == 1.00002, GANANCIA_ACIERTO, 0) - np.where(weight < 1.00002, COSTO_ESTIMULO, 0)
+    ganancia = ganancia[np.argsort(y_pred)[::-1]]
+    ganancia = np.cumsum(ganancia)
+
+    return 'gan_eval', np.max(ganancia) , True
 
 ## SE ARMAN LAS PREDICCIONES PARA EL TARGET
 def build_final_predictions(clientes, predict_models, df_predict, n_envios):
@@ -209,7 +216,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
 
     params = {
             'objective': 'binary',
-              'metric': None,
+              'metric': 'custom',
               'boosting_type': 'rf',
               'first_metric_only': True,
               'boost_from_average': True,
@@ -223,7 +230,7 @@ def build_and_save_models(study, semillas : list, train_dataset : pl.DataFrame, 
     new_params["min_data_in_leaf"] = new_params["min_data_in_leaf"] * 100 / undersampling_fraction
     
     params.update(new_params)
-    model = lgb.train(params,train_data)
+    model = lgb.train(params,train_data, feval= lgb_gan_eval)
 
     modelos[seed] = model
     if is_test:
@@ -305,7 +312,7 @@ def objective(trial) -> float:
     for s in SEMILLA:
       params = {
         'objective': 'binary',
-        'metric': 'auc',
+        'metric': 'custom',
         'boosting_type': 'rf',
         'first_metric_only': True,
         'boost_from_average': True,
@@ -334,6 +341,7 @@ def objective(trial) -> float:
       modelos[s] = lgb.train(
         params,
         train_data,
+        feval=lgb_gan_eval,
         valid_sets=[val_data],
         callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
       )
