@@ -73,17 +73,17 @@ def generate_deltas(df : pl.DataFrame):
     for c in numeric_cols:
         logger.info(f"Delta for column {c}")
         expressions.append(
-            pl.col(c).shift(-1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
+            pl.col(c).shift(1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64)
         )
         expressions.append(
-            pl.col(c).shift(-2).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64)
+            pl.col(c).shift(2).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64)
         )
 
         expressions.append(
-            (pl.col(c) - pl.col(c).shift(-1).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64)
+            (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64)
         )
         expressions.append(
-            (pl.col(c) - pl.col(c).shift(-2).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64)
+            (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64)
         )
 
     return df.with_columns(expressions)
