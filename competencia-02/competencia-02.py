@@ -265,23 +265,15 @@ df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 df_train_with_target = df_train.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
 df_val_with_target = df_val.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
 df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
-df_train_predict = df_train_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+df_train_predict_with_target = df_train_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+df_predict_with_target = df_predict.select(['numero_de_cliente'])
 if IS_EXPERIMENTO:
-  logger.info(f"Dropeamos clase_ternaria del dataframe de predict para después hacer un doble chequeo")
   df_predict_with_target = df_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso','clase_ternaria'])
 
-
-logger.info(f"1")
-df_predict_clientes = df_predict.select(['numero_de_cliente'])
-logger.info(f"2")
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-logger.info(f"3")
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-logger.info(f"4")
 df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-logger.info(f"5")
 df_test_ternaria = df_test["clase_ternaria"]
-logger.info(f"6")
 df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
 logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_with_target.shape}")
@@ -430,13 +422,13 @@ if IS_EXPERIMENTO:
   # Reconstruir DataFrame con numero_de_cliente y clase_binaria para alinear correctamente
   df_predict_with_target = df_predict.select(['numero_de_cliente']).with_columns(df_predict_clase_binaria.alias('clase_binaria'))
   df_predict = df_predict.drop(['clase_peso', 'clase_binaria'])
-  comp_predictions = build_final_predictions(df_predict_clientes["numero_de_cliente"], predict_models, df_predict, n_envios)
+  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
   ganancia, n_envios = ganancia_evaluator(comp_predictions, df_predict_clase_binaria, df_true=df_predict_with_target)
   logger.info(f"Ganancia en Prediccion de Experimento : {ganancia} con {n_envios} envios")
 else:
   prediction_path = os.path.join(BUCKETS, BUCKET_TARGET, f"predictions.csv")
   logger.info(f"Build submission {prediction_path}")
-  comp_predictions = build_final_predictions(df_predict_clientes["numero_de_cliente"], predict_models, df_predict, n_envios)
+  comp_predictions = build_final_predictions(df_predict_with_target["numero_de_cliente"], predict_models, df_predict, n_envios)
   comp_predictions.write_csv(prediction_path)
 
 logger.info(f"Program Ends")
