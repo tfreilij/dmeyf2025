@@ -288,8 +288,8 @@ df_test_ternaria = df_test["clase_ternaria"]
 df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
 logger.info(f"Opt Val Data : {len(df_val.columns)} , {df_val_with_target.shape}")
-logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target["clase_binaria"].sum()}")
-logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target["clase_binaria"].value_counts()}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target['clase_binaria'].sum()}")
+logger.info(f"DEBUG: VALORES DE CLASE BINARIA {df_val_with_target['clase_binaria'].value_counts()}")
 
 # FUNCION OBJETIVO PARA OPTUNA
 def objective(trial) -> float:
