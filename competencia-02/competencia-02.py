@@ -341,7 +341,6 @@ def objective(trial) -> float:
       modelos[s] = lgb.train(
         params,
         train_data,
-        feval=lgb_gan_eval,
         callbacks=[lgb.early_stopping(100), lgb.log_evaluation(0)]
       )
     
