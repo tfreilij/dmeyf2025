@@ -5,7 +5,7 @@ from pathlib import Path
 
 class Config():
     def __init__(self):
-        load_dotenv()
+        load_dotenv("/home/tomas_freilij/buckets/b1")
         self.filepath = Path(os.getenv("config"))
         self.data = self._load_yaml()
 
