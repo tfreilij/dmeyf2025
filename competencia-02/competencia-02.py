@@ -249,11 +249,6 @@ logger.info(f"MES_TEST : {MES_TEST}")
 logger.info(f"FINAL_PREDICT : {FINAL_PREDICT}")
 logger.info(f"FINAL_TRAIN : {FINAL_TRAIN}")
 
-logger.info("Split Clientes")
-clientes_test = df.filter(pl.col('foto_mes') == MES_TEST)["numero_de_cliente"]
-clientes_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)["numero_de_cliente"]
-clientes_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)["numero_de_cliente"]
-
 df = generate_clase_peso(df)
 df = generate_clase_binaria(df)
 df = drop_columns(df)
@@ -277,6 +272,12 @@ if IS_EXPERIMENTO:
 
 logger.info(f"?!?!?!?!?!?!?!?")
 df_predict_clientes = df_predict.select(['numero_de_cliente'])
+
+# Extract client IDs AFTER creating the filtered dataframes to ensure perfect alignment
+logger.info("Split Clientes")
+clientes_test = df_test_with_target["numero_de_cliente"]
+clientes_val = df_val_with_target["numero_de_cliente"]
+clientes_predict = df_predict_clientes["numero_de_cliente"]
 
 df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
