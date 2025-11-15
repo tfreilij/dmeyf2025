@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 dataset_crudo_file = "competencia_02_crudo.csv.gz"
-df_crudo = pl.read_csv(os.path.join(DATASETS_PATH,dataset_crudo_file), infer_schema_length=None)
+df_crudo = pl.read_csv(os.path.join(BUCKETS,BUCKET_TARGET,dataset_crudo_file), infer_schema_length=None)
 df = df_crudo.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, False])
 df_ternaria = df.with_columns(
     pl.col("foto_mes").shift(-1).over("numero_de_cliente").alias("next_month_foto_mes"),
