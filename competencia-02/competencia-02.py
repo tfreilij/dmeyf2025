@@ -290,8 +290,6 @@ logger.info(f"Read DataFrame : {os.path.join(BUCKETS,BUCKET_ORIGIN,"competencia_
 df_fe = pl.read_csv(os.path.join(BUCKETS,BUCKET_ORIGIN,"competencia_02_fe.csv"))
 logger.info(f"Dataframe size : {df_fe.shape}")
 
-df_crudo = df_fe.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, False])
-
 logger.info("Split Dataset")
 logger.info(f"MES_TRAIN : {MES_TRAIN}")
 logger.info(f"MES_VALIDACION : {MES_VALIDACION}")
@@ -300,37 +298,40 @@ logger.info(f"FINAL_PREDICT : {FINAL_PREDICT}")
 logger.info(f"FINAL_TRAIN : {FINAL_TRAIN}")
 
 
-df_peso = generate_clase_peso(df_fe)
-df_binaria = generate_clase_binaria(df_peso)
-df = drop_columns(df_binaria)
+df_fe = df_fe.sort(by=["numero_de_cliente", "foto_mes"], descending=[False, False])
 
-logger.info(f"Resumen de clase ternaria {df['clase_ternaria'].value_counts()}")
+df = generate_clase_peso(df_fe)
+df = generate_clase_binaria(df)
 
-logger.info(f"Resumen de clase binaria {df['clase_binaria'].value_counts()}")
+df = drop_columns(df)
 
 df_train = df.filter(pl.col('foto_mes').is_in(MES_TRAIN))
-df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
 
-logger.info(df_train["clase_binaria"].value_counts())
+df_train = undersample_df(df_train, UNDERSAMPLE_FRACTION)
 
 df_test = df.filter(pl.col('foto_mes') == MES_TEST)
 df_predict = df.filter(pl.col('foto_mes') == FINAL_PREDICT)
 df_train_predict = df.filter(pl.col('foto_mes').is_in(FINAL_TRAIN))
 df_val = df.filter(pl.col('foto_mes') == MES_VALIDACION)
 
+print(df_train["clase_binaria"].value_counts())
 # Crear DataFrames de alineación con numero_de_cliente y clase_binaria antes de cualquier drop
 df_train_with_target = df_train.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
 df_val_with_target = df_val.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
-df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
+
+print(f"test target: {df_test["clase_binaria"].value_counts()}")
+print(f"train target: {df_train_with_target["clase_binaria"].value_counts()}")
+
+df_test_with_target = df_test.select(['numero_de_cliente', 'clase_binaria','clase_peso', "clase_ternaria"])
 df_train_predict_with_target = df_train_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso'])
 df_predict_with_target = df_predict.select(['numero_de_cliente'])
 if IS_EXPERIMENTO:
   df_predict_with_target = df_predict.select(['numero_de_cliente', 'clase_binaria','clase_peso','clase_ternaria'])
+  df_predict = df_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
-df_train = df_train.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-df_train_predict = df_train_predict.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+df_train = df_train.drop(['numero_de_cliente', 'clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
+df_train_predict = df_train_predict.drop(['numero_de_cliente','clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 df_val = df_val.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
-df_test_ternaria = df_test["clase_ternaria"]
 df_test = df_test.drop(['clase_binaria','clase_peso','foto_mes',"clase_ternaria"])
 
 
