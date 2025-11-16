@@ -243,7 +243,7 @@ def build_and_save_or_load_models(study, semillas : list, train_dataset : pl.Dat
         modelos[seed] = lgb.Booster(model_file=model_file_path)
   else:
     logger.info("Train Predict Models (some models were missing or not all present)")
-    train_dataset_pd = train_dataset.to_pandas()
+    train_dataset_pd = train_dataset.to_numpy()
     y_target_np = y_target["clase_binaria"].to_numpy()
     weight_np = y_target["clase_peso"].to_numpy()
 
