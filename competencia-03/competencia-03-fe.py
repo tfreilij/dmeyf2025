@@ -27,7 +27,7 @@ def clase_ternaria(df: pl.DataFrame) -> pl.DataFrame:
         ])
         .with_columns(
             pl.when(pl.col("foto_mes") >= 202108)
-            .then(None)
+            .then(pl.list(None))
             .when(pl.col("has_next_two_months"))
             .then("CONTINUA")
             .when(pl.col("has_next_month") & ~pl.col("has_next_two_months"))
