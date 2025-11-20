@@ -71,7 +71,8 @@ def run_feature_engineering():
     BUCKET_ORIGIN = config["BUCKET_ORIGIN"]
     BUCKET_TARGET = config["BUCKET_ORIGIN"]
 
-    file_origin = Path(BUCKETS) / BUCKET_ORIGIN / "competencia_03_crudo.csv.gz"
+    file_origin_comp2 = Path(BUCKETS) / BUCKET_ORIGIN / "competencia_02_crudo.csv.gz"
+    file_origin_comp3 = Path(BUCKETS) / BUCKET_ORIGIN / "competencia_03_crudo.csv.gz"
     file_target = Path(BUCKETS) / BUCKET_TARGET / "competencia_03_fe.parquet"
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
@@ -81,9 +82,14 @@ def run_feature_engineering():
 
     logger = setup_logging(log_path)
 
-    logger.info(f"Reading dataset {file_origin}")
-    df = pl.read_csv(file_origin, infer_schema_length=None)
+    logger.info(f"Reading dataset {file_origin_comp2}")
+    df_comp2 = pl.read_csv(file_origin_comp2, infer_schema_length=None)
 
+    logger.info(f"Reading dataset {file_origin_comp3}")
+    df_comp3 = pl.read_csv(file_origin_comp3, infer_schema_length=None)
+
+    df = df_comp2.vhstack(df_comp3)
+    
     logger.info("Sorting data")
     df = df.sort(["numero_de_cliente", "foto_mes"])
 
