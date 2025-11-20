@@ -16,29 +16,22 @@ def setup_logging(log_path: Path):
     return logging.getLogger(__name__)
 def clase_ternaria(df: pl.DataFrame) -> pl.DataFrame:
     df = (
-        df
-        .with_columns([
-            pl.col("foto_mes").shift(-1).over("numero_de_cliente").alias("next_month_foto_mes"),
-            pl.col("foto_mes").shift(-2).over("numero_de_cliente").alias("next_two_months_foto_mes"),
-        ])
-        .with_columns([
-            pl.col("next_month_foto_mes").is_not_null().alias("has_next_month"),
-            pl.col("next_two_months_foto_mes").is_not_null().alias("has_next_two_months"),
-        ])
-        .with_columns(
-            pl.when(pl.col("foto_mes") >= 202108)
-            .then(pl.lit(None))
-            .when(pl.col("has_next_two_months"))
-            .then("CONTINUA")
-            .when(pl.col("has_next_month") & ~pl.col("has_next_two_months"))
-            .then("BAJA+2")
-            .otherwise("BAJA+1")
-            .alias("clase_ternaria")
-        )
-        .drop([
-            "next_month_foto_mes", "next_two_months_foto_mes",
-            "has_next_month", "has_next_two_months"
-        ])
+            df.with_columns(
+        pl.col("foto_mes").shift(-1).over("numero_de_cliente").alias("next_month_foto_mes"),
+        pl.col("foto_mes").shift(-2).over("numero_de_cliente").alias("next_two_months_foto_mes")
+    ).with_columns(
+        has_next_month = pl.col("next_month_foto_mes").is_not_null(),
+        has_next_two_months = pl.col("next_two_months_foto_mes").is_not_null()
+    ).with_columns(
+        pl.when(pl.col("foto_mes") >= 202108)
+        .then(pl.lit(None))
+        .when(pl.col("has_next_two_months"))
+        .then(pl.lit("CONTINUA"))
+        .when(pl.col("has_next_month") & ~pl.col("has_next_two_months"))
+        .then(pl.lit("BAJA+2"))
+        .otherwise(pl.lit("BAJA+1"))
+        .alias("clase_ternaria")
+    ).drop(["next_month_foto_mes", "next_two_months_foto_mes", "has_next_month", "has_next_two_months"])
     )
     return df
 def filter_foto_mes_range(df: pl.DataFrame, start_mes: int, end_mes: int) -> pl.DataFrame:
