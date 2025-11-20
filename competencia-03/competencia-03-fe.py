@@ -88,7 +88,7 @@ def run_feature_engineering():
     logger.info(f"Reading dataset {file_origin_comp3}")
     df_comp3 = pl.read_csv(file_origin_comp3, infer_schema_length=None)
 
-    df = df_comp2.vhstack(df_comp3)
+    df = df_comp2.vstack(df_comp3)
     
     logger.info("Sorting data")
     df = df.sort(["numero_de_cliente", "foto_mes"])
