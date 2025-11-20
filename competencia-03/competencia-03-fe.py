@@ -1,6 +1,5 @@
 import polars as pl
 import logging
-import os
 from pathlib import Path
 from load_config import Config
 import datetime
@@ -90,7 +89,7 @@ def run_feature_engineering():
     logger = setup_logging(log_path)
 
     logger.info(f"Reading dataset {file_origin}")
-    df = pl.read_csv(file_origin)
+    df = pl.read_csv(file_origin, infer_schema_length=None)
 
     logger.info("Sorting data")
     df = df.sort(["numero_de_cliente", "foto_mes"])
