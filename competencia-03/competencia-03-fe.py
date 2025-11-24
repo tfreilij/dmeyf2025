@@ -150,7 +150,7 @@ def run_feature_engineering():
     logger.info(df["clase_ternaria"].value_counts())
 
     logger.info("Writing parquet output...")
-    df.write_parquet(file_target)
+    df.write_csv(file_target)
 
     logger.info(f"Dataset written to {file_target}")
 
