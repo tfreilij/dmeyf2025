@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from load_config import Config
 import datetime
+import numpy as np
 
 def setup_logging(log_path: Path):
     logging.basicConfig(
@@ -64,6 +65,43 @@ def generate_deltas(df: pl.DataFrame, logger: logging.Logger) -> pl.DataFrame:
 
     return df.with_columns(exprs)
 
+def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
+    df = df.with_columns(
+        pl.when(pl.col("cliente_antiguedad") == 1)
+        .then(pl.col("ctrx_quarter") * 5.0)
+        .when(pl.col("cliente_antiguedad") == 2)
+        .then(pl.col("ctrx_quarter") * 2.0)
+        .when(pl.col("cliente_antiguedad") == 3)
+        .then(pl.col("ctrx_quarter") * 1.2)
+        .otherwise(pl.col("ctrx_quarter"))  # por si hay otros valores
+        .alias("ctrx_quarter_normalizado")
+    )
+    return df
+
+
+def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
+    df = df.with_columns(
+        pl.when(pl.col("cliente_antiguedad") == 1)
+        .then(pl.col("ctrx_quarter") * 5.0)
+        .when(pl.col("cliente_antiguedad") == 2)
+        .then(pl.col("ctrx_quarter") * 2.0)
+        .when(pl.col("cliente_antiguedad") == 3)
+        .then(pl.col("ctrx_quarter") * 1.2)
+        .otherwise(pl.col("ctrx_quarter"))  # por si hay otros valores
+        .alias("ctrx_quarter_normalizado")
+    )
+    return df
+
+
+def canaritos(df : pl.DataFrame) -> pl.DataFrame:
+
+    
+    for i in range(1, 11):
+        df = df.with_columns(
+            pl.lit(pl.Series(np.random.rand(df.height()))).alias(f"canarito_{i}")
+        )
+    return df
+
 def run_feature_engineering():
     config = Config()
 
@@ -101,6 +139,13 @@ def run_feature_engineering():
 
     logger.info("Delete 202006 month")
     df = filter_foto_mes_range(df,202006,202006)
+
+
+    logger.info("CTRX_Quarter adjustment:")
+    df = ctrx_quarter(df)
+
+    logger.info("Canaritos:")
+    df = canaritos(df)
 
     logger.info("Clase ternaria distribution:")
     logger.info(df["clase_ternaria"].value_counts())
