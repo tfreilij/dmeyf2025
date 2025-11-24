@@ -94,12 +94,11 @@ def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def canaritos(df : pl.DataFrame) -> pl.DataFrame:
-
     
-    for i in range(1, 11):
-        df = df.with_columns(
-            pl.lit(pl.Series(np.random.rand(df.height()))).alias(f"canarito_{i}")
-        )
+    df = df.with_columns([
+        pl.lit(np.random.rand(df.height())).alias(f"canarito_{i}")
+        for i in range(1, 11)
+        ])
     return df
 
 def run_feature_engineering():
