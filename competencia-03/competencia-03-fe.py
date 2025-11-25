@@ -49,21 +49,28 @@ def deltas_columns(df: pl.DataFrame):
 
     return [c for c in df.columns if c not in drop_cols]
 def generate_deltas(df: pl.DataFrame, logger: logging.Logger) -> pl.DataFrame:
-    cols = deltas_columns(df)
-    numeric_cols = [c for c in cols if df.schema[c].is_numeric()]
+    df = df.sort(["numero_de_cliente", "foto_mes"])
 
-    exprs = []
-    for c in numeric_cols:
-        logger.info(f"Generating deltas for column {c}")
+    cols_lagueables = [
+        c for c in df.columns
+        if c not in ["numero_de_cliente", "foto_mes", "clase_ternaria"]
+    ]
 
-        exprs.extend([
-            pl.col(c).shift(1).over("numero_de_cliente").alias(f"lag_1_{c}").cast(pl.Float64),
-            pl.col(c).shift(2).over("numero_de_cliente").alias(f"lag_2_{c}").cast(pl.Float64),
-            (pl.col(c) - pl.col(c).shift(1).over("numero_de_cliente")).alias(f"delta_1_{c}").cast(pl.Float64),
-            (pl.col(c) - pl.col(c).shift(2).over("numero_de_cliente")).alias(f"delta_2_{c}").cast(pl.Float64),
+    for lag in [1, 2]:
+        df = df.with_columns([
+            pl.col(c).shift(lag).over("numero_de_cliente").alias(f"{c}_lag{lag}")
+            for c in cols_lagueables
         ])
 
-    return df.with_columns(exprs)
+    df = df.with_columns([
+        (pl.col(c) - pl.col(f"{c}_lag1")).alias(f"{c}_delta1")
+        for c in cols_lagueables
+    ] + [
+        (pl.col(c) - pl.col(f"{c}_lag2")).alias(f"{c}_delta2")
+        for c in cols_lagueables
+    ])
+
+    return df
 
 def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns(
@@ -77,21 +84,6 @@ def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
         .alias("ctrx_quarter_normalizado")
     )
     return df
-
-
-def ctrx_quarter(df: pl.DataFrame) -> pl.DataFrame:
-    df = df.with_columns(
-        pl.when(pl.col("cliente_antiguedad") == 1)
-        .then(pl.col("ctrx_quarter") * 5.0)
-        .when(pl.col("cliente_antiguedad") == 2)
-        .then(pl.col("ctrx_quarter") * 2.0)
-        .when(pl.col("cliente_antiguedad") == 3)
-        .then(pl.col("ctrx_quarter") * 1.2)
-        .otherwise(pl.col("ctrx_quarter"))  # por si hay otros valores
-        .alias("ctrx_quarter_normalizado")
-    )
-    return df
-
 
 def canaritos(df : pl.DataFrame) -> pl.DataFrame:
     
@@ -110,7 +102,7 @@ def run_feature_engineering():
 
     file_origin_comp2 = Path(BUCKETS) / BUCKET_ORIGIN / "competencia_02_crudo.csv.gz"
     file_origin_comp3 = Path(BUCKETS) / BUCKET_ORIGIN / "competencia_03_crudo.csv.gz"
-    file_target = Path(BUCKETS) / BUCKET_TARGET / "competencia_03_fe.parquet"
+    file_target = Path(BUCKETS) / BUCKET_TARGET / "competencia_03_fe.csv"
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
     log_dir = Path(BUCKETS) / BUCKET_TARGET / "log"
@@ -149,7 +141,7 @@ def run_feature_engineering():
     logger.info("Clase ternaria distribution:")
     logger.info(df["clase_ternaria"].value_counts())
 
-    logger.info("Writing parquet output...")
+    logger.info("Writing output...")
     df.write_csv(file_target)
 
     logger.info(f"Dataset written to {file_target}")
